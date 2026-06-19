@@ -9,14 +9,20 @@ Run screen for executing calculations with live output.
 
 from __future__ import annotations
 
-import threading
+import asyncio
 import traceback
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ase.io import read
-from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
 from textual.widgets import Button, Log, ProgressBar, Static
+
+from umakit.engine import CalculationEngine, EngineConfig
+
+if TYPE_CHECKING:
+    from textual.app import ComposeResult
 
 
 class RunScreen(Screen):
@@ -51,11 +57,7 @@ class RunScreen(Screen):
         self.log_widget = self.query_one("#run-log", Log)
         self.progress = self.query_one("#progress-bar", ProgressBar)
         self.status = self.query_one("#status-text", Static)
-
-        # Start calculation in background thread
-        self.calculation_thread = threading.Thread(target=self._run_calculation)
-        self.calculation_thread.daemon = True
-        self.calculation_thread.start()
+        self._task = asyncio.create_task(self._run_calculation())
 
     def _log(self, message: str) -> None:
         """Add message to log."""
@@ -71,165 +73,112 @@ class RunScreen(Screen):
 
         self.app.call_from_thread(update)
 
-    def _run_calculation(self) -> None:
-        """Run the calculation in background thread."""
+    def _update_indeterminate(self, status: str) -> None:
+        """Update progress bar to indeterminate mode."""
+
+        def update():
+            self.progress.update(progress=None)
+            self.status.update(status)
+
+        self.app.call_from_thread(update)
+
+    def _get_engine_config(self) -> EngineConfig:
+        """Build EngineConfig from app state."""
+        calc_type = self.app.get_config("calc_type")
+        options = {}
+        if calc_type == "opt":
+            options.update(
+                {
+                    "fmax": self.app.get_config("fmax", 0.05),
+                    "max_steps": self.app.get_config("max_steps", 500),
+                    "optimizer": self.app.get_config("optimizer", "FIRE"),
+                    "cell_opt": self.app.get_config("cell_opt", False),
+                    "fix_symmetry": self.app.get_config("fix_symmetry", False),
+                }
+            )
+        elif calc_type == "md":
+            options.update(
+                {
+                    "ensemble": self.app.get_config("ensemble", "NVT"),
+                    "temperature": self.app.get_config("temperature", 300.0),
+                    "timestep": self.app.get_config("timestep", 1.0),
+                    "steps": self.app.get_config("md_steps", 1000),
+                    "save_interval": self.app.get_config("save_interval", 10),
+                    "pre_relax": self.app.get_config("pre_relax", True),
+                    "pre_relax_steps": self.app.get_config("pre_relax_steps", 50),
+                    "pre_relax_fmax": self.app.get_config("pre_relax_fmax", 0.1),
+                }
+            )
+
+        return EngineConfig(
+            calc_type=calc_type,
+            model_path=Path(self.app.get_config("model_file", "")),
+            task=self.app.get_config("task", "omat"),
+            device=self.app.get_config("device", "cpu"),
+            output_dir=Path(self.app.get_config("output_dir", "./results")),
+            job_name=self.app.get_config("job_name"),
+            options=options,
+        )
+
+    async def _run_calculation(self) -> None:
+        """Run the calculation asynchronously with progress events."""
         try:
-            calc_type = self.app.get_config("calc_type")
+            config = self._get_engine_config()
 
-            if calc_type == "sp":
-                self._run_sp()
-            elif calc_type == "opt":
-                self._run_opt()
-            elif calc_type == "md":
-                self._run_md()
-            elif calc_type == "batch":
-                self._run_batch()
+            self._log("Loading structure...")
+            structure_file = self.app.get_config("structure_file")
+            atoms = read(structure_file)
+            self._log(f"Loaded: {atoms.get_chemical_formula()} ({len(atoms)} atoms)")
 
+            engine = CalculationEngine.from_config(config)
+            self._task = asyncio.current_task()
+
+            async for event in engine.run_async(atoms):
+                if event.phase == "loading_model":
+                    self._update_indeterminate(event.message)
+                elif event.phase == "running":
+                    if event.total_steps is not None:
+                        pct = (
+                            (event.step / event.total_steps) * 100 if event.step else 0
+                        )
+                        self._update_progress(pct, event.message)
+                    else:
+                        self._update_indeterminate(event.message)
+                elif event.phase == "writing_output":
+                    self._update_indeterminate(event.message)
+                elif event.phase == "done":
+                    self._update_progress(100, "Complete")
+                    self._log("\nCalculation complete!")
+                    if event.extra and "energy" in event.extra:
+                        self._log(f"Energy: {event.extra['energy']:.6f} eV")
+                    self._log(f"Output: {self.app.get_config('output_dir')}")
+                elif event.phase == "error":
+                    self._log(f"\nERROR: {event.message}")
+                    self._update_progress(0, "Failed")
+
+        except asyncio.CancelledError:
+            self._log("\nCalculation cancelled by user")
+            self._update_progress(0, "Cancelled")
         except Exception as e:
-            self._log(f"\n❌ ERROR: {e}")
+            self._log(f"\nERROR: {e}")
             self._log(traceback.format_exc())
             self._update_progress(0, "Failed")
-
         finally:
-            # Enable back button
+
             def enable_back():
                 back_btn = self.query_one("#back-btn", Button)
                 back_btn.disabled = False
 
             self.app.call_from_thread(enable_back)
 
-    def _run_sp(self) -> None:
-        """Run single point calculation."""
-        from umakit.calculator import UMACalculator
-        from umakit.runners.singlepoint import SinglePointRunner
-
-        self._log("Loading structure...")
-        atoms = read(self.app.get_config("structure_file"))
-        self._log(f"Loaded: {atoms.get_chemical_formula()} ({len(atoms)} atoms)")
-
-        self._update_progress(10, "Loading model...")
-        calc = UMACalculator(
-            model_path=self.app.get_config("model_file"),
-            task=self.app.get_config("task"),
-            device=self.app.get_config("device"),
-        )
-
-        self._update_progress(30, "Running calculation...")
-        runner = SinglePointRunner(
-            calc,
-            output_dir=self.app.get_config("output_dir"),
-            verbose=False,
-            job_name=self.app.get_config("job_name"),
-            log_fn=lambda msg, lvl="info": self._log(msg),
-        )
-
-        results = runner.run(atoms)
-
-        self._update_progress(100, "Complete")
-        self._log("\n✅ Calculation complete!")
-        self._log(f"Energy: {results['energy']:.6f} eV")
-        self._log(f"Output: {self.app.get_config('output_dir')}")
-
-    def _run_opt(self) -> None:
-        """Run geometry optimization."""
-        from umakit.calculator import UMACalculator
-        from umakit.runners.optimization import OptimizationRunner
-
-        self._log("Loading structure...")
-        atoms = read(self.app.get_config("structure_file"))
-        self._log(f"Loaded: {atoms.get_chemical_formula()} ({len(atoms)} atoms)")
-
-        self._update_progress(10, "Loading model...")
-        calc = UMACalculator(
-            model_path=self.app.get_config("model_file"),
-            task=self.app.get_config("task"),
-            device=self.app.get_config("device"),
-        )
-
-        self._update_progress(20, "Running optimization...")
-        runner = OptimizationRunner(
-            calc,
-            fmax=self.app.get_config("fmax"),
-            max_steps=self.app.get_config("max_steps"),
-            optimizer=self.app.get_config("optimizer"),
-            cell_opt=self.app.get_config("cell_opt"),
-            fix_symmetry=self.app.get_config("fix_symmetry"),
-            output_dir=self.app.get_config("output_dir"),
-            verbose=False,
-            job_name=self.app.get_config("job_name"),
-            log_fn=lambda msg, lvl="info": self._log(msg),
-        )
-
-        # Custom progress callback
-        original_callback = None
-
-        results = runner.run(atoms)
-
-        self._update_progress(100, "Complete")
-        self._log("\n✅ Optimization complete!")
-        self._log(f"Converged: {results['converged']}")
-        self._log(f"Steps: {results['nsteps']}")
-        self._log(f"Final energy: {results['energy']:.6f} eV")
-
-    def _run_md(self) -> None:
-        """Run molecular dynamics."""
-        from umakit.calculator import UMACalculator
-        from umakit.runners.md import MDRunner
-
-        self._log("Loading structure...")
-        atoms = read(self.app.get_config("structure_file"))
-        self._log(f"Loaded: {atoms.get_chemical_formula()} ({len(atoms)} atoms)")
-
-        self._update_progress(10, "Loading model...")
-        calc = UMACalculator(
-            model_path=self.app.get_config("model_file"),
-            task=self.app.get_config("task"),
-            device=self.app.get_config("device"),
-        )
-
-        self._update_progress(20, "Setting up MD...")
-        runner = MDRunner(
-            calc,
-            ensemble=self.app.get_config("ensemble"),
-            temperature=self.app.get_config("temperature"),
-            timestep=self.app.get_config("timestep"),
-            steps=self.app.get_config("md_steps"),
-            save_interval=self.app.get_config("save_interval"),
-            output_dir=self.app.get_config("output_dir"),
-            verbose=False,
-            job_name=self.app.get_config("job_name"),
-            # NEW: Pre-relaxation options
-            pre_relax=self.app.get_config("pre_relax", True),
-            pre_relax_steps=self.app.get_config("pre_relax_steps", 50),
-            pre_relax_fmax=self.app.get_config("pre_relax_fmax", 0.1),
-            log_fn=lambda msg, lvl="info": self._log(msg),
-        )
-
-        self._log(f"Ensemble: {self.app.get_config('ensemble')}")
-        self._log(f"Temperature: {self.app.get_config('temperature')} K")
-        self._log(f"Steps: {self.app.get_config('md_steps')}")
-
-        if self.app.get_config("pre_relax", True):
-            self._log("Pre-relaxation: Enabled")
-
-        results = runner.run(atoms)
-
-        self._update_progress(100, "Complete")
-        self._log("\n✅ MD simulation complete!")
-        self._log(f"Final temperature: {results['temperature']:.1f} K")
-        self._log(f"Steps completed: {results['md_steps']}")
-
-    def _run_batch(self) -> None:
-        """Run batch processing."""
-        self._log("Batch processing not yet implemented in TUI")
-        self._log("Please use command line: uma_calc batch ...")
-
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
         button_id = event.button.id
 
         if button_id == "cancel-btn":
-            self._log("\n⚠️ Cancel requested (finishing current step)...")
+            if self._task and not self._task.done():
+                self._task.cancel()
+            self._log("\nCancel requested (finishing current step)...")
 
         elif button_id == "back-btn":
             self.app.pop_screen()

@@ -196,6 +196,12 @@ class ConfigScreen(Screen):
                 Switch(value=True, id="pre-relax"),
             )
 
+        # Background / detach option for all calc types
+        yield Horizontal(
+            Label("Run in background (detach):"),
+            Switch(value=False, id="detach-switch"),
+        )
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
         button_id = event.button.id
@@ -339,6 +345,10 @@ class ConfigScreen(Screen):
 
             pre_relax = self.query_one("#pre-relax", Switch)
             self.app.update_config("pre_relax", pre_relax.value)
+
+        # Detach switch
+        detach_switch = self.query_one("#detach-switch", Switch)
+        self.app.update_config("detach", detach_switch.value)
 
         # Go to run screen
         self.app.push_screen("run")
