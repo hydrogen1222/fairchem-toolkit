@@ -36,26 +36,32 @@ demos, and application efforts for materials science and quantum chemistry.
 > UMAKit provides a familiar VASP-style interface for running FAIRChem UMA machine-learning interatomic potential calculations. It supports CLI, TUI (interactive terminal UI), and Python API modes.
 > 
 > ```bash
-> # Install
-> cd uma && uv pip install -e .
+> # 1. Install fairchem-core first (NOT on PyPI — install from local packages/)
+> cd packages/fairchem-core
+> uv pip install -e ".[dev]"
 > 
-> # Interactive TUI mode
+> # 2. Install UMAKit
+> cd ../../uma
+> uv pip install -e .
+> 
+> # 3. Run (two equivalent methods)
+> uv run uma_calc tui                # method A: uv run (auto-detects venv)
+> # OR
+> source ../.venv/bin/activate       # method B: activate venv first
 > uma_calc tui
 > 
-> # CLI: single-point energy
-> uma_calc sp structure.cif --model uma-s-1.pt --task omat --device cuda
-> 
-> # CLI: geometry optimization
-> uma_calc opt POSCAR --model uma-s-1.pt --fmax 0.02 --cell-opt
-> 
-> # CLI: molecular dynamics (NVT @ 300K)
-> uma_calc md POSCAR --model uma-s-1.pt --ensemble NVT --temp 300 --steps 10000
-> 
-> # CLI: batch processing + job management
-> uma_calc batch structures/ --model uma-s-1.pt --pattern "*.cif"
-> uma_calc jobs                    # list background jobs
-> uma_calc kill <job_id>           # kill a running job
+> # CLI examples
+> uv run uma_calc sp structure.cif --model uma-s-1.pt --task omat --device cuda
+> uv run uma_calc opt POSCAR --model uma-s-1.pt --fmax 0.02 --cell-opt
+> uv run uma_calc md POSCAR --model uma-s-1.pt --ensemble NVT --temp 300 --steps 10000
+> uv run uma_calc batch structures/ --model uma-s-1.pt --pattern "*.cif"
+> uv run uma_calc jobs               # list background jobs
+> uv run uma_calc kill <job_id>      # kill a running job
 > ```
+> 
+> **CUDA GPU:** Install fairchem-core in a CUDA-enabled environment (PyTorch with CUDA). `fairchem-core` depends on PyTorch — ensure your PyTorch build includes CUDA (`import torch; print(torch.cuda.is_available())`). UMAKit auto-detects CPU/CUDA.
+> 
+> **CPU only:** fairchem-core installs with CPU PyTorch by default. UMAKit works with `--device cpu`.
 > 
 > **Features:** Single-point | Geometry optimization (FIRE/BFGS/LBFGS) | MD (NVT/NVE) | Batch processing | Background jobs | VASP-compatible output (OUTCAR, CONTCAR, XDATCAR, OSZICAR) | CPU & CUDA | Cross-platform
 > 

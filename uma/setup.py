@@ -5,47 +5,13 @@
 
 """
 Setup script for UMA Calculator package.
+
+All project metadata and dependencies are configured in pyproject.toml.
+This file exists as the build-backend entry point for setuptools.
 """
 
 from __future__ import annotations
 
-from setuptools import find_packages, setup
+from setuptools import setup
 
-setup(
-    name="umakit",
-    version="1.0.0",
-    description="VASP-like interface for FAIRChem UMA models",
-    author="FAIRChem User",
-    packages=find_packages(),
-    entry_points={
-        "console_scripts": [
-            "uma_calc=umakit.cli:main",
-        ],
-    },
-    python_requires=">=3.9",
-    install_requires=[
-        "fairchem-core",
-        "ase>=3.26.0",
-        "numpy",
-        "tqdm",
-        "textual>=0.40.0",
-    ],
-    extras_require={
-        "dev": [
-            "pytest",
-            "ruff",
-            "mypy",
-        ],
-    },
-    classifiers=[
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Topic :: Scientific/Engineering :: Chemistry",
-        "Topic :: Scientific/Engineering :: Physics",
-    ],
-)
+setup()

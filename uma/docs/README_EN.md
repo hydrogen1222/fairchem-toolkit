@@ -83,21 +83,59 @@ Unlike VASP, which solves the Kohn-Sham equations self-consistently, UMAKit uses
 
 ### 2.2 Installing with uv (recommended)
 
+> **Important:** `fairchem-core` is NOT published on PyPI. It must be installed from the local `packages/fairchem-core/` directory in this repository.
+
 ```bash
 # Clone the repository
 git clone https://github.com/FAIR-Chem/fairchem.git
 cd fairchem
 
-# Install fairchem-core
+# Step 1: Install fairchem-core (REQUIRED — must be done first)
 cd packages/fairchem-core
 uv pip install -e ".[dev]"
 
-# UMAKit is in the uma/ directory
+# Step 2: Install UMAKit
 cd ../../uma
 uv pip install -e .
 ```
 
-### 2.3 Model Checkpoint
+### 2.3 CUDA GPU vs CPU Installation
+
+UMAKit does not ship its own PyTorch — it inherits the PyTorch installation provided by `fairchem-core`.
+
+| Scenario | PyTorch | UMAKit device flag |
+|----------|---------|--------------------|
+| **CUDA GPU machine** | `fairchem-core` installed in CUDA Python env | `--device cuda` |
+| **CPU-only machine** | `fairchem-core` installed in standard Python env | `--device cpu` (default) |
+
+**Verify CUDA availability after installation:**
+
+```bash
+uv run python -c "import torch; print('CUDA available' if torch.cuda.is_available() else 'CPU only')"
+```
+
+**If CUDA is not available but you have a GPU:**
+- Ensure your PyTorch build includes CUDA (`pip install torch` with CUDA index)
+- Or install `fairchem-core` in a conda/venv environment that already has CUDA PyTorch
+
+### 2.4 How to Run Commands
+
+Two equivalent methods:
+
+```bash
+# Method A: uv run (recommended — auto-detects .venv, works everywhere)
+uv run uma_calc --help
+uv run uma_calc tui
+uv run uma_calc sp structure.cif --model uma-s-1.pt
+
+# Method B: Activate venv first
+source .venv/bin/activate      # Linux/Mac
+# .venv\Scripts\activate       # Windows
+uma_calc --help
+uma_calc tui
+```
+
+### 2.5 Model Checkpoint
 
 Download the UMA model checkpoint from FAIRChem:
 
@@ -109,13 +147,13 @@ Download the UMA model checkpoint from FAIRChem:
 
 The model path is specified with `--model` (CLI), in the TUI config screen, or via the `MODEL_PATH` key in INCAR files.
 
-### 2.4 Verify Installation
+### 2.6 Verify Installation
 
 ```bash
-uma_calc --help
+uv run uma_calc --help
 ```
 
-Should print the help message with all available subcommands.
+Should print the help message with all available subcommands: `sp`, `opt`, `md`, `batch`, `run`, `template`, `jobs`, `kill`, `clean`, `tui`.
 
 ---
 
@@ -125,7 +163,7 @@ Should print the help message with all available subcommands.
 
 ```bash
 # Single-point energy of a crystal structure
-uma_calc sp structure.cif --model uma-s-1.pt --task omat
+uv run uma_calc sp structure.cif --model uma-s-1.pt --task omat
 
 # Output:
 # ================================================================================
@@ -156,7 +194,7 @@ uma_calc sp structure.cif --model uma-s-1.pt --task omat
 
 ```bash
 # Launch the interactive terminal UI
-uma_calc tui
+uv run uma_calc tui
 ```
 
 Navigate with arrow keys, Tab to switch fields, Enter to select.
