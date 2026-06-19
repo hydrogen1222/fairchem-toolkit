@@ -216,6 +216,7 @@ class CalculationEngine:
                     break
         except asyncio.CancelledError:
             task.cancel()
+            raise
             # Don't yield here — async generators shouldn't yield
             # during CancelledError. The caller handles cleanup.
         finally:

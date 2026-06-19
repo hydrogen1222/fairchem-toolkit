@@ -61,26 +61,18 @@ class RunScreen(Screen):
 
     def _log(self, message: str) -> None:
         """Add message to log."""
-        self.app.call_from_thread(self.log_widget.write_line, message)
+        self.log_widget.write_line(message)
 
     def _update_progress(self, value: float, status: str = "") -> None:
         """Update progress bar."""
-
-        def update():
-            self.progress.update(progress=value)
-            if status:
-                self.status.update(status)
-
-        self.app.call_from_thread(update)
+        self.progress.update(progress=value)
+        if status:
+            self.status.update(status)
 
     def _update_indeterminate(self, status: str) -> None:
         """Update progress bar to indeterminate mode."""
-
-        def update():
-            self.progress.update(progress=None)
-            self.status.update(status)
-
-        self.app.call_from_thread(update)
+        self.progress.update(progress=None)
+        self.status.update(status)
 
     def _get_engine_config(self) -> EngineConfig:
         """Build EngineConfig from app state."""
@@ -118,6 +110,7 @@ class RunScreen(Screen):
             output_dir=Path(self.app.get_config("output_dir", "./results")),
             job_name=self.app.get_config("job_name"),
             options=options,
+            detach=self.app.get_config("detach", False),
         )
 
     async def _run_calculation(self) -> None:
@@ -164,12 +157,8 @@ class RunScreen(Screen):
             self._log(traceback.format_exc())
             self._update_progress(0, "Failed")
         finally:
-
-            def enable_back():
-                back_btn = self.query_one("#back-btn", Button)
-                back_btn.disabled = False
-
-            self.app.call_from_thread(enable_back)
+            back_btn = self.query_one("#back-btn", Button)
+            back_btn.disabled = False
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button presses."""
