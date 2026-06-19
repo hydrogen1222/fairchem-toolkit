@@ -18,20 +18,17 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from ase.io import read
 
 from umakit.calculator import UMACalculator
 from umakit.config import IncarConfig, get_default_config
-from umakit.runners.batch import BatchRunner
+from umakit.engine import CalculationEngine, EngineConfig
 from umakit.runners.md import MDRunner
 from umakit.runners.optimization import OptimizationRunner
 from umakit.runners.singlepoint import SinglePointRunner
-
-if TYPE_CHECKING:
-    from typing import Any
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -71,19 +68,22 @@ Examples:
         description="Read configuration from INCAR.uma and run calculation",
     )
     run_parser.add_argument(
-        "-i", "--incar",
+        "-i",
+        "--incar",
         type=str,
         default="INCAR.uma",
         help="Path to INCAR configuration file (default: INCAR.uma)",
     )
     run_parser.add_argument(
-        "-s", "--structure",
+        "-s",
+        "--structure",
         type=str,
         default=None,
         help="Structure file (default: POSCAR, CONTCAR, or from INCAR)",
     )
     run_parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         default=".",
         help="Output directory (default: current directory)",
@@ -364,14 +364,15 @@ Examples:
         help="Type of template to generate",
     )
     template_parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         type=str,
         default=None,
         help="Output file name (default: INCAR.{type})",
     )
 
     # tui command
-    tui_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "tui",
         help="Launch interactive TUI mode",
         description="Launch interactive terminal UI for visual configuration",
@@ -508,190 +509,156 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_sp(args: argparse.Namespace) -> int:
     """Execute 'sp' command."""
-    # Read structure
+
     structure_path = Path(args.structure)
     if not structure_path.exists():
         print(f"Error: Structure file not found: {structure_path}")
         return 1
 
-    print(f"Reading structure from: {structure_path}")
-    try:
-        atoms = read(structure_path)
-    except Exception as e:
-        print(f"Error reading structure: {e}")
-        return 1
-
-    print(f"System: {atoms.get_chemical_formula()}")
-    print(f"Atoms: {len(atoms)}")
-    print()
-
-    # Setup calculator
-    print(f"Loading model: {args.model}")
-    try:
-        calculator = UMACalculator(
-            model_path=args.model,
-            task=args.task,
-            device=args.device,
-        )
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return 1
-
-    # Run calculation
-    output_dir = Path(args.output)
-    runner = SinglePointRunner(
-        calculator,
-        output_dir=output_dir,
-        verbose=True,
+    config = EngineConfig(
+        calc_type="sp",
+        model_path=Path(args.model),
+        task=args.task,
+        device=args.device,
+        output_dir=Path(args.output),
         job_name=args.name,
     )
-    try:
-        runner.run(atoms)
-    except (RuntimeError, ValueError) as e:
-        print(f"\n{e}")
-        return 1
-    except Exception as e:
-        print(f"\nError during calculation: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
 
-    return 0
+    print_header()
+    print(f"System: reading from {structure_path}")
+
+    try:
+        atoms = read(structure_path)
+        print(f"System: {atoms.get_chemical_formula()}")
+        print(f"Atoms: {len(atoms)}")
+
+        engine = CalculationEngine.from_config(config)
+        engine.run(atoms)
+        return 0
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
 
 
 def cmd_opt(args: argparse.Namespace) -> int:
     """Execute 'opt' command."""
-    # Read structure
+
     structure_path = Path(args.structure)
     if not structure_path.exists():
         print(f"Error: Structure file not found: {structure_path}")
         return 1
 
+    config = EngineConfig(
+        calc_type="opt",
+        model_path=Path(args.model),
+        task=args.task,
+        device=args.device,
+        output_dir=Path(args.output),
+        job_name=args.name,
+        options={
+            "fmax": args.fmax,
+            "max_steps": args.max_steps,
+            "optimizer": args.optimizer,
+            "cell_opt": args.cell_opt,
+            "fix_symmetry": args.fix_symmetry,
+        },
+    )
+
+    print_header()
     print(f"Reading structure from: {structure_path}")
+
     try:
         atoms = read(structure_path)
+        print(f"System: {atoms.get_chemical_formula()}")
+        print(f"Atoms: {len(atoms)}")
+
+        engine = CalculationEngine.from_config(config)
+        engine.run(atoms)
+        return 0
     except Exception as e:
-        print(f"Error reading structure: {e}")
+        print(f"Error: {e}")
         return 1
-
-    print(f"System: {atoms.get_chemical_formula()}")
-    print(f"Atoms: {len(atoms)}")
-    print()
-
-    # Setup calculator
-    print(f"Loading model: {args.model}")
-    try:
-        calculator = UMACalculator(
-            model_path=args.model,
-            task=args.task,
-            device=args.device,
-        )
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return 1
-
-    # Run calculation
-    output_dir = Path(args.output)
-    runner = OptimizationRunner(
-        calculator,
-        fmax=args.fmax,
-        max_steps=args.max_steps,
-        optimizer=args.optimizer,
-        cell_opt=args.cell_opt,
-        fix_symmetry=args.fix_symmetry,
-        output_dir=output_dir,
-        verbose=True,
-        job_name=args.name,
-    )
-    runner.run(atoms)
-
-    return 0
 
 
 def cmd_md(args: argparse.Namespace) -> int:
     """Execute 'md' command."""
-    # Read structure
+
     structure_path = Path(args.structure)
     if not structure_path.exists():
         print(f"Error: Structure file not found: {structure_path}")
         return 1
 
+    config = EngineConfig(
+        calc_type="md",
+        model_path=Path(args.model),
+        task=args.task,
+        device=args.device,
+        inference_mode="turbo",
+        output_dir=Path(args.output),
+        job_name=args.name,
+        options={
+            "ensemble": args.ensemble,
+            "temperature": args.temp,
+            "timestep": args.timestep,
+            "steps": args.steps,
+            "friction": args.friction,
+            "save_interval": args.save_interval,
+        },
+    )
+
+    print_header()
     print(f"Reading structure from: {structure_path}")
+
     try:
         atoms = read(structure_path)
+        print(f"System: {atoms.get_chemical_formula()}")
+        print(f"Atoms: {len(atoms)}")
+
+        engine = CalculationEngine.from_config(config)
+        engine.run(atoms)
+        return 0
     except Exception as e:
-        print(f"Error reading structure: {e}")
+        print(f"Error: {e}")
         return 1
-
-    print(f"System: {atoms.get_chemical_formula()}")
-    print(f"Atoms: {len(atoms)}")
-    print()
-
-    # Setup calculator with turbo mode for MD
-    print(f"Loading model: {args.model}")
-    try:
-        calculator = UMACalculator(
-            model_path=args.model,
-            task=args.task,
-            device=args.device,
-            inference_mode="turbo",
-        )
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return 1
-
-    # Run calculation
-    output_dir = Path(args.output)
-    runner = MDRunner(
-        calculator,
-        ensemble=args.ensemble,
-        temperature=args.temp,
-        timestep=args.timestep,
-        steps=args.steps,
-        friction=args.friction,
-        save_interval=args.save_interval,
-        output_dir=output_dir,
-        verbose=True,
-        job_name=args.name,
-    )
-    runner.run(atoms)
-
-    return 0
 
 
 def cmd_batch(args: argparse.Namespace) -> int:
     """Execute 'batch' command."""
+
     input_dir = Path(args.input_dir)
     if not input_dir.exists():
         print(f"Error: Input directory not found: {input_dir}")
         return 1
 
-    # Setup calculator
-    print(f"Loading model: {args.model}")
-    try:
-        calculator = UMACalculator(
-            model_path=args.model,
-            task=args.task,
-            device=args.device,
-        )
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return 1
-
-    # Run batch
-    output_dir = Path(args.output)
-    runner = BatchRunner(
-        calculator,
-        calc_type=args.calc_type,
-        output_dir=output_dir,
-        verbose=True,
+    config = EngineConfig(
+        calc_type="batch",
+        model_path=Path(args.model),
+        task=args.task,
+        device=args.device,
+        output_dir=Path(args.output),
         job_name=args.name,
+        options={
+            "sub_calc_type": args.calc_type,
+            "pattern": args.pattern,
+        },
     )
-    summary = runner.run_from_directory(input_dir, pattern=args.pattern)
 
-    if summary["failed"] > 0:
+    print_header()
+
+    try:
+        engine = CalculationEngine.from_config(config)
+        files = list(input_dir.glob(args.pattern))
+        if not files:
+            print(f"No files matching '{args.pattern}' found in {input_dir}")
+            return 1
+        print(f"Found {len(files)} structure files")
+        summary = engine.run_batch(files)
+        if summary["failed"] > 0:
+            return 1
+        return 0
+    except Exception as e:
+        print(f"Error: {e}")
         return 1
-    return 0
 
 
 def cmd_template(args: argparse.Namespace) -> int:
@@ -711,10 +678,10 @@ def cmd_template(args: argparse.Namespace) -> int:
 def cmd_tui(args: argparse.Namespace) -> int:
     """Launch interactive TUI mode."""
     try:
-        from umakit.tui import UmaCalcApp
+        from umakit.tui import UmaCalcApp  # noqa: PLC0415
     except ImportError as e:
         print("Error: TUI mode requires textual.")
-        print(f"Install with: pip install textual")
+        print("Install with: pip install textual")
         print(f"Import error: {e}")
         return 1
 
@@ -731,10 +698,10 @@ def main(argv: list[str] | None = None) -> int:
     # If no arguments provided, launch TUI by default
     if len(argv) == 0:
         try:
-            from umakit.tui import UmaCalcApp
+            from umakit.tui import UmaCalcApp  # noqa: PLC0415
+
             print("Launching interactive TUI mode...")
             print("(Use --help for command-line interface)")
-            import time
             time.sleep(0.5)
             app = UmaCalcApp()
             return app.run()
