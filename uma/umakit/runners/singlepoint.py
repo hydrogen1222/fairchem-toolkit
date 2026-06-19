@@ -16,12 +16,10 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ase.io import write
-
 from umakit.runners.base import BaseRunner
-from umakit.writers.outcar import OutcarWriter
 from umakit.writers.contcar import ContcarWriter
 from umakit.writers.json_writer import JsonWriter
+from umakit.writers.outcar import OutcarWriter
 
 if TYPE_CHECKING:
     from typing import Any
@@ -49,6 +47,7 @@ class SinglePointRunner(BaseRunner):
         write_contcar: bool = True,
         verbose: bool = True,
         job_name: str | None = None,
+        log_fn: Any | None = None,
     ):
         """Initialize single point runner.
 
@@ -60,8 +59,9 @@ class SinglePointRunner(BaseRunner):
             write_contcar: Whether to write CONTCAR file
             verbose: Whether to print progress messages
             job_name: Optional job name for organizing results
+            log_fn: Optional callback function for custom log output
         """
-        super().__init__(calculator, output_dir, verbose, job_name)
+        super().__init__(calculator, output_dir, verbose, job_name, log_fn)
         self.write_outcar = write_outcar
         self.write_json = write_json
         self.write_contcar = write_contcar
@@ -76,6 +76,7 @@ class SinglePointRunner(BaseRunner):
             Dictionary with results (energy, forces, stress, time)
         """
         self.print_header("SINGLE POINT CALCULATION")
+        self._emit_progress("loading_model", "Loading model and preparing structure...")
 
         # Prepare atoms (check PBC, cell, etc.)
         atoms = self._prepare_atoms(atoms)
@@ -87,11 +88,14 @@ class SinglePointRunner(BaseRunner):
 
         # Validate structure
         if atoms.cell.volume <= 0:
-            raise ValueError("Invalid cell: zero or negative volume. Check input structure.")
+            raise ValueError(
+                "Invalid cell: zero or negative volume. Check input structure."
+            )
 
         # Setup calculator
         calc = self._get_calculator()
         atoms.calc = calc
+        self._emit_progress("running", "Calculating energy and forces...")
 
         # Run calculation
         self.log("Calculating energy and forces...")
@@ -129,6 +133,9 @@ class SinglePointRunner(BaseRunner):
         # Get stress if supported
         stress = None
         if self.calculator.has_stress:
+            self._emit_progress(
+                "running", "Calculating stress...", extra={"energy": float(energy)}
+            )
             self.log("Calculating stress...")
             stress = atoms.get_stress()
 
@@ -146,10 +153,19 @@ class SinglePointRunner(BaseRunner):
         }
 
         # Write outputs
+        self._emit_progress("writing_output", "Writing output files...")
         self._write_outputs(atoms, results)
 
         # Print summary
         self._write_summary(results, atoms)
+        self._emit_progress(
+            "done",
+            "Calculation complete",
+            extra={
+                "energy": float(energy),
+                "time": calc_time,
+            },
+        )
 
         return results
 

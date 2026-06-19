@@ -22,14 +22,13 @@ from typing import TYPE_CHECKING
 import numpy as np
 from ase.constraints import FixSymmetry
 from ase.filters import FrechetCellFilter
-from ase.io import write
 from ase.optimize import BFGS, FIRE, LBFGS
 
 from umakit.runners.base import BaseRunner
-from umakit.writers.outcar import OutcarWriter
-from umakit.writers.oszicar import OszicarWriter
 from umakit.writers.contcar import ContcarWriter
 from umakit.writers.json_writer import JsonWriter
+from umakit.writers.oszicar import OszicarWriter
+from umakit.writers.outcar import OutcarWriter
 
 if TYPE_CHECKING:
     from typing import Any
@@ -76,6 +75,7 @@ class OptimizationRunner(BaseRunner):
         trajectory_interval: int = 1,
         verbose: bool = True,
         job_name: str | None = None,
+        log_fn: Any | None = None,
     ):
         """Initialize optimization runner.
 
@@ -93,8 +93,9 @@ class OptimizationRunner(BaseRunner):
             trajectory_interval: Interval for saving trajectory frames
             verbose: Whether to print progress messages
             job_name: Optional job name for organizing results
+            log_fn: Optional callback function for custom log output
         """
-        super().__init__(calculator, output_dir, verbose, job_name)
+        super().__init__(calculator, output_dir, verbose, job_name, log_fn)
         self.fmax = fmax
         self.max_steps = max_steps
         self.optimizer_name = optimizer.lower()
@@ -117,7 +118,7 @@ class OptimizationRunner(BaseRunner):
             self.log(
                 "Warning: Stress not supported for this task, "
                 "cell optimization disabled",
-                level="warning"
+                level="warning",
             )
             self.cell_opt = False
 
@@ -163,6 +164,9 @@ class OptimizationRunner(BaseRunner):
             logfile = str(self.output_dir / "optimization.log")
 
         opt = optimizer_class(opt_atoms, logfile=logfile)
+        self._emit_progress(
+            "running", "Starting optimization...", step=0, total_steps=self.max_steps
+        )
 
         # Setup trajectory tracking
         trajectory = []
@@ -173,18 +177,29 @@ class OptimizationRunner(BaseRunner):
             energy = atoms.get_potential_energy()
             forces = atoms.get_forces()
 
-            trajectory.append({
-                "step": step,
-                "energy": energy,
-                "forces": forces.copy(),
-                "natoms": len(atoms),
-            })
+            trajectory.append(
+                {
+                    "step": step,
+                    "energy": energy,
+                    "forces": forces.copy(),
+                    "natoms": len(atoms),
+                }
+            )
 
             # Print progress every 10 steps
             if step % 10 == 0 or step == 1:
                 force_mags = np.linalg.norm(forces, axis=1)
                 fmax_current = np.max(force_mags)
-                self.log(f"Step {step:4d}: E = {energy:12.6f} eV, fmax = {fmax_current:.6f} eV/Å")
+                self._emit_progress(
+                    "running",
+                    f"Step {step:4d}: E = {energy:12.6f} eV, fmax = {fmax_current:.6f} eV/A",
+                    step=step,
+                    total_steps=self.max_steps,
+                    extra={"energy": float(energy), "fmax": float(fmax_current)},
+                )
+                self.log(
+                    f"Step {step:4d}: E = {energy:12.6f} eV, fmax = {fmax_current:.6f} eV/Å"
+                )
 
         opt.attach(trajectory_callback)
 
@@ -224,10 +239,20 @@ class OptimizationRunner(BaseRunner):
         }
 
         # Write outputs
+        self._emit_progress("writing_output", "Writing output files...")
         self._write_outputs(atoms, results, trajectory)
 
         # Print summary
         self._write_summary(results, atoms)
+        self._emit_progress(
+            "done",
+            f"Optimization {'converged' if converged else 'not converged'} in {opt.nsteps} steps",
+            extra={
+                "energy": float(energy),
+                "converged": converged,
+                "nsteps": opt.nsteps,
+            },
+        )
 
         return results
 

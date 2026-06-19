@@ -184,6 +184,12 @@ class MDRunner(BaseRunner):
         Returns:
             Relaxed Atoms object
         """
+        self._emit_progress(
+            "running",
+            "Pre-relaxing structure...",
+            step=0,
+            total_steps=self.pre_relax_steps,
+        )
         self.log("\n" + "=" * 60)
         self.log("PRE-RELAXATION PHASE")
         self.log("=" * 60)
@@ -236,6 +242,7 @@ class MDRunner(BaseRunner):
             Dictionary with results including final temperature and trajectory
         """
         self.print_header("MOLECULAR DYNAMICS")
+        self._emit_progress("loading_model", "Loading model and preparing structure...")
 
         # Print settings
         self.log(f"Ensemble:         {self.ensemble.upper()}")
@@ -289,6 +296,12 @@ class MDRunner(BaseRunner):
 
         # Run MD
         self.log("\nStarting MD simulation...")
+        self._emit_progress(
+            "running",
+            f"Starting {self.ensemble.upper()} MD simulation...",
+            step=0,
+            total_steps=self.steps,
+        )
         start_time = time.time()
 
         # Track for early termination if atoms explode
@@ -333,6 +346,17 @@ class MDRunner(BaseRunner):
 
             # Print progress every 100 steps
             if step % 100 == 0 or step == self.steps:
+                self._emit_progress(
+                    "running",
+                    f"Step {step:6d}/{self.steps}: E = {total_e:12.4f} eV, T = {temp:6.1f} K",
+                    step=step,
+                    total_steps=self.steps,
+                    extra={
+                        "energy": float(pe),
+                        "temperature": float(temp),
+                        "total_energy": float(total_e),
+                    },
+                )
                 self.log(
                     f"Step {step:6d}/{self.steps}: "
                     f"E = {total_e:12.4f} eV, T = {temp:6.1f} K"
@@ -379,10 +403,16 @@ class MDRunner(BaseRunner):
         }
 
         # Write outputs
+        self._emit_progress("writing_output", "Writing trajectory and output files...")
         self._write_outputs(atoms, results, trajectory)
 
         # Print summary
         self._write_summary(results, atoms)
+        self._emit_progress(
+            "done",
+            f"MD complete. Final T = {final_temp:.1f} K",
+            extra={"energy": float(final_energy), "temperature": float(final_temp)},
+        )
 
         return results
 

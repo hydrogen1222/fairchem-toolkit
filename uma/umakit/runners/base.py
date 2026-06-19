@@ -16,12 +16,15 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from umakit.protocols import ProgressEvent
+
 if TYPE_CHECKING:
     from typing import Any
 
     from ase import Atoms
 
     from umakit.calculator import UMACalculator
+    from umakit.protocols import ProgressCallback
 
 
 class BaseRunner(ABC):
@@ -50,6 +53,7 @@ class BaseRunner(ABC):
         verbose: bool = True,
         job_name: str | None = None,
         log_fn: Any | None = None,
+        progress_callback: ProgressCallback | None = None,
     ):
         """Initialize base runner.
 
@@ -59,11 +63,13 @@ class BaseRunner(ABC):
             verbose: Whether to print progress messages
             job_name: Optional job name for organizing results
             log_fn: Optional callback function for custom log output
+            progress_callback: Optional callback for progress events
         """
         self.calculator = calculator
         self.job_name = job_name
         self.verbose = verbose
         self.log_fn = log_fn
+        self.progress_callback = progress_callback
 
         # Build output directory path
         base_dir = Path(output_dir)
@@ -110,6 +116,34 @@ class BaseRunner(ABC):
                 self.log_fn(msg, "info")
             if self.verbose:
                 print(msg)
+
+    def _emit_progress(
+        self,
+        phase: str,
+        message: str,
+        step: int | None = None,
+        total_steps: int | None = None,
+        extra: dict | None = None,
+    ) -> None:
+        """Emit a progress event to the callback if registered.
+
+        Args:
+            phase: Current phase (loading_model, running, writing_output, done, error)
+            message: Human-readable description
+            step: Current step number
+            total_steps: Total expected steps
+            extra: Optional phase-specific data
+        """
+        if self.progress_callback is None:
+            return
+        event = ProgressEvent(
+            phase=phase,
+            message=message,
+            step=step,
+            total_steps=total_steps,
+            extra=extra,
+        )
+        self.progress_callback(event)
 
     @abstractmethod
     def run(self, atoms: Atoms) -> dict[str, Any]:
@@ -162,7 +196,7 @@ class BaseRunner(ABC):
 
         return atoms
 
-    def _get_calculator(self) -> "Calculator":
+    def _get_calculator(self) -> Calculator:
         """Get ASE calculator instance.
 
         Returns:
