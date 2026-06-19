@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 # Screen imports - done here to avoid circular imports
 from umakit.tui.config_screen import ConfigScreen
+from umakit.tui.jobs_screen import JobsScreen
 from umakit.tui.main_screen import MainScreen, TemplateScreen
 from umakit.tui.run_screen import RunScreen
 
@@ -217,6 +218,7 @@ class UmaCalcApp(App):
         "config": ConfigScreen,
         "run": RunScreen,
         "template": TemplateScreen,
+        "jobs": JobsScreen,
     }
 
     def on_mount(self) -> None:
