@@ -20,7 +20,9 @@ from fairchem.core.units.mlip_unit import load_predict_unit
 from fairchem.core.units.mlip_unit.api.inference import InferenceSettings
 
 if TYPE_CHECKING:
-    from typing import Literal
+    from typing import ClassVar, Literal
+
+    from fairchem.core.units.mlip_unit import MLIPPredictUnit
 
 
 class UMACalculator:
@@ -35,9 +37,9 @@ class UMACalculator:
         >>> energy = atoms.get_potential_energy()
     """
 
-    VALID_TASKS = {"omat", "omol", "oc20", "oc25", "odac", "omc"}
-    VALID_DEVICES = {"cpu", "cuda", "gpu"}
-    VALID_INFERENCE_MODES = {"default", "turbo"}
+    VALID_TASKS: ClassVar[set[str]] = {"omat", "omol", "oc20", "oc25", "odac", "omc"}
+    VALID_DEVICES: ClassVar[set[str]] = {"cpu", "cuda", "gpu"}
+    VALID_INFERENCE_MODES: ClassVar[set[str]] = {"default", "turbo"}
 
     def __init__(
         self,
@@ -45,6 +47,8 @@ class UMACalculator:
         task: str = "omat",
         device: Literal["cpu", "cuda"] | None = None,
         inference_mode: str = "default",
+        torch_num_threads: int | None = None,
+        activation_checkpointing: bool | None = None,
     ):
         """Initialize UMA calculator wrapper.
 
@@ -53,6 +57,8 @@ class UMACalculator:
             task: Task type (omat, omol, oc20, odac, omc)
             device: Device for calculation (cpu or cuda)
             inference_mode: Inference mode (default or turbo)
+            torch_num_threads: Number of threads for PyTorch inference
+            activation_checkpointing: Enable activation checkpointing
 
         Raises:
             FileNotFoundError: If model file doesn't exist
@@ -62,6 +68,8 @@ class UMACalculator:
         self.task = task.lower()
         self.device = device or "cpu"
         self.inference_mode = inference_mode.lower()
+        self.torch_num_threads = torch_num_threads
+        self.activation_checkpointing = activation_checkpointing
 
         # Validate inputs
         self._validate()
@@ -87,21 +95,22 @@ class UMACalculator:
                 f"Must be one of: {', '.join(self.VALID_INFERENCE_MODES)}"
             )
 
-    def load_predictor(self) -> "MLIPPredictUnit":
+    def load_predictor(self) -> MLIPPredictUnit:
         """Load the prediction unit from checkpoint.
 
         Returns:
             Loaded MLIPPredictUnit
         """
         if self._predictor is None:
-            # For default mode, don't pass inference_settings to avoid issues
-            # For turbo mode, use the settings
             if self.inference_mode == "turbo":
                 settings = InferenceSettings(
                     tf32=True,
-                    activation_checkpointing=False,
+                    activation_checkpointing=self.activation_checkpointing
+                    if self.activation_checkpointing is not None
+                    else False,
                     merge_mole=True,
                     compile=True,
+                    torch_num_threads=self.torch_num_threads,
                 )
                 self._predictor = load_predict_unit(
                     path=self.model_path,
@@ -109,10 +118,16 @@ class UMACalculator:
                     inference_settings=settings,
                 )
             else:
-                # Default mode - simpler approach like test_simple.py
+                settings = InferenceSettings(
+                    activation_checkpointing=self.activation_checkpointing
+                    if self.activation_checkpointing is not None
+                    else True,
+                    torch_num_threads=self.torch_num_threads,
+                )
                 self._predictor = load_predict_unit(
                     path=self.model_path,
                     device=self.device,
+                    inference_settings=settings,
                 )
 
         return self._predictor
