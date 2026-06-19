@@ -31,12 +31,42 @@ demos, and application efforts for materials science and quantum chemistry.
 > **Fork Notice & Enhancements**
 > This repository is a customized fork of Meta FAIR Chemistry's open-source [fairchem](https://github.com/facebookresearch/fairchem) project. 
 > 
-> Key enhancements added in this repository:
-> *   **UMA Kit TUI/CLI (`uma_calc`)**: A command-line and interactive Textual TUI wrapper for running UMA foundation model calculations (single-point, optimization/relaxation, and Langevin molecular dynamics) with a VASP-like interface. See the [uma/ docs](file:///D:/Agent/fairchem/uma/docs/README.md) for more details.
-> *   **Bug Fixes & Refinements**: 
->     *   Fixed Python `SyntaxError`s caused by multiple/misplaced docstrings in application scripts (including `main.py`, `dense_eval.py`, and `run_validation.py`).
->     *   Fixed Langevin MD temperature DOF calculation under atomic constraints in `md.py`.
->     *   Fixed argument forwarding in the adsorption example script.
+> ### UMAKit — VASP-like Calculator for UMA Models
+> 
+> UMAKit provides a familiar VASP-style interface for running FAIRChem UMA machine-learning interatomic potential calculations. It supports CLI, TUI (interactive terminal UI), and Python API modes.
+> 
+> ```bash
+> # Install
+> cd uma && uv pip install -e .
+> 
+> # Interactive TUI mode
+> uma_calc tui
+> 
+> # CLI: single-point energy
+> uma_calc sp structure.cif --model uma-s-1.pt --task omat --device cuda
+> 
+> # CLI: geometry optimization
+> uma_calc opt POSCAR --model uma-s-1.pt --fmax 0.02 --cell-opt
+> 
+> # CLI: molecular dynamics (NVT @ 300K)
+> uma_calc md POSCAR --model uma-s-1.pt --ensemble NVT --temp 300 --steps 10000
+> 
+> # CLI: batch processing + job management
+> uma_calc batch structures/ --model uma-s-1.pt --pattern "*.cif"
+> uma_calc jobs                    # list background jobs
+> uma_calc kill <job_id>           # kill a running job
+> ```
+> 
+> **Features:** Single-point | Geometry optimization (FIRE/BFGS/LBFGS) | MD (NVT/NVE) | Batch processing | Background jobs | VASP-compatible output (OUTCAR, CONTCAR, XDATCAR, OSZICAR) | CPU & CUDA | Cross-platform
+> 
+> 📖 **[Full User Manual (English)](uma/docs/README_EN.md)** | 📖 **[完整中文手册](uma/docs/README_CN.md)** | 💡 **[Examples](uma/docs/EXAMPLES.md)**
+> 
+> *Key improvements in this fork:*
+> *   Unified CalculationEngine shared by CLI/TUI/API — no code duplication
+> *   asyncio-based TUI with live progress, job cancellation, and background job management
+> *   ProgressEvent protocol for structured progress reporting in all runners
+> *   Fixed module headers, CSS errors, and MD temperature DOF calculation under constraints
+> *   BatchRunner ThreadPoolExecutor parallel execution
 
 
 > :warning: **FAIRChem version 2 is a breaking change from version 1 and is not compatible with our previous pretrained models and code.**
