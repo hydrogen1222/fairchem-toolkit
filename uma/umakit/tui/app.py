@@ -17,7 +17,7 @@ from textual.containers import Container
 from textual.widgets import Footer, Header, Static
 
 if TYPE_CHECKING:
-    from typing import Any
+    from typing import Any, ClassVar
 
 # Screen imports - done here to avoid circular imports
 from umakit.tui.config_screen import ConfigScreen
@@ -38,7 +38,7 @@ class UmaCalcApp(App):
 
     CSS = """
     #main-container {
-        width: 80;
+        width: 100%;
         height: auto;
         border: solid $primary;
         padding: 1;
@@ -157,7 +157,7 @@ class UmaCalcApp(App):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list] = [
         Binding("q", "quit", "Quit", show=True),
         Binding("escape", "back", "Back", show=True),
         Binding("f1", "help", "Help", show=True),
@@ -212,7 +212,7 @@ class UmaCalcApp(App):
         )
         yield Footer()
 
-    SCREENS = {
+    SCREENS: ClassVar[dict] = {
         "main": MainScreen,
         "config": ConfigScreen,
         "run": RunScreen,

@@ -1,18 +1,15 @@
-from __future__ import annotations
-
-"""
-Copyright (c) Meta Platforms, Inc. and affiliates.
-
-This source code is licensed under the MIT license found in the
-LICENSE file in the root directory of this source tree.
-"""
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 """Configuration screen for UMA Calculator TUI."""
+
+from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import (
@@ -27,19 +24,37 @@ from textual.widgets import (
 )
 
 if TYPE_CHECKING:
-    from typing import Any
+    from typing import ClassVar
+
+    from textual.app import ComposeResult
 
 
 class ConfigScreen(Screen):
     """Configuration screen for setting up calculation parameters."""
 
-    BINDINGS = [
+    BINDINGS: ClassVar[list[tuple[str, str, str]]] = [
         ("escape", "back", "Back"),
         ("up", "scroll_up", "Scroll Up"),
         ("down", "scroll_down", "Scroll Down"),
         ("pageup", "page_up", "Page Up"),
         ("pagedown", "page_down", "Page Down"),
     ]
+
+    CSS = """
+    #structure-status, #model-status {
+        margin-top: 0;
+        margin-bottom: 1;
+        padding-left: 1;
+    }
+    .status-ok {
+        color: $success;
+        text-style: bold;
+    }
+    .status-error {
+        color: $error;
+        text-style: italic;
+    }
+    """
 
     def compose(self) -> ComposeResult:
         """Compose the configuration screen."""
@@ -49,8 +64,7 @@ class ConfigScreen(Screen):
         with Container(id="config-main"):
             # Header at top
             yield Container(
-                Static(f"Configuration: {calc_type.upper()}", id="title"),
-                id="header"
+                Static(f"Configuration: {calc_type.upper()}", id="title"), id="header"
             )
 
             # Scrollable content area
@@ -60,28 +74,31 @@ class ConfigScreen(Screen):
 
                 yield Label("Structure File:")
                 yield Input(
-                    placeholder="e.g., structure.cif or POSCAR",
-                    id="structure-input"
+                    placeholder="e.g., structure.cif or POSCAR (relative paths supported)",
+                    value=str(self.app.get_config("structure_file", "") or ""),
+                    id="structure-input",
                 )
+                yield Static("", id="structure-status")
 
                 yield Label("Model File:")
                 yield Input(
-                    placeholder="e.g., uma-s-1.pt",
-                    value=str(self.app.get_config("model_file", "")),
-                    id="model-input"
+                    placeholder="e.g., uma-s-1.pt (relative paths supported)",
+                    value=str(self.app.get_config("model_file", "") or ""),
+                    id="model-input",
                 )
+                yield Static("", id="model-status")
 
                 yield Label("Output Directory:")
                 yield Input(
                     value=self.app.get_config("output_dir", "./results"),
-                    id="output-input"
+                    id="output-input",
                 )
 
                 yield Label("Job Name (optional):")
                 yield Input(
                     placeholder="e.g., structure_01",
-                    value=str(self.app.get_config("job_name", "")),
-                    id="job-name-input"
+                    value=str(self.app.get_config("job_name", "") or ""),
+                    id="job-name-input",
                 )
 
                 # Task selection
@@ -98,14 +115,20 @@ class ConfigScreen(Screen):
                         ("Molecular Crystals (omc)", "omc"),
                     ],
                     value=self.app.get_config("task", "omat"),
-                    id="task-select"
+                    id="task-select",
                 )
 
                 yield Label("Device:")
                 yield RadioSet(
-                    RadioButton("CPU", id="cpu", value=self.app.get_config("device") == "cpu"),
-                    RadioButton("CUDA (GPU)", id="cuda", value=self.app.get_config("device") == "cuda"),
-                    id="device-radio"
+                    RadioButton(
+                        "CPU", id="cpu", value=self.app.get_config("device") == "cpu"
+                    ),
+                    RadioButton(
+                        "CUDA (GPU)",
+                        id="cuda",
+                        value=self.app.get_config("device") == "cuda",
+                    ),
+                    id="device-radio",
                 )
 
                 # Calculation-specific options
@@ -143,7 +166,7 @@ class ConfigScreen(Screen):
             yield Select(
                 options=[("FIRE", "FIRE"), ("BFGS", "BFGS"), ("LBFGS", "LBFGS")],
                 value="FIRE",
-                id="optimizer-select"
+                id="optimizer-select",
             )
 
             yield Horizontal(
@@ -156,7 +179,7 @@ class ConfigScreen(Screen):
             yield RadioSet(
                 RadioButton("NVT", id="nvt", value=True),
                 RadioButton("NVE", id="nve"),
-                id="ensemble-radio"
+                id="ensemble-radio",
             )
 
             yield Label("Temperature (K):")
@@ -183,6 +206,50 @@ class ConfigScreen(Screen):
         elif button_id == "run-btn":
             self._save_and_run()
 
+    def _validate_path(self, input_id: str, value: str) -> bool:
+        """Validate input path and update its status label.
+
+        Returns True if valid/exists, False otherwise.
+        """
+        status_id = f"#{input_id.replace('-input', '-status')}"
+        try:
+            status_widget = self.query_one(status_id, Static)
+        except Exception:
+            return False
+
+        val_stripped = value.strip()
+        if not val_stripped:
+            status_widget.update(
+                "[!] Please specify a path (relative paths supported, e.g. ./structure.cif)"
+            )
+            status_widget.set_classes("status-error")
+            return False
+
+        path = Path(val_stripped)
+        resolved_path = path.resolve()
+
+        if resolved_path.exists():
+            status_widget.update(f"[OK] Found: {resolved_path}")
+            status_widget.set_classes("status-ok")
+            return True
+        else:
+            status_widget.update(f"[NOT FOUND] Checked: {resolved_path}")
+            status_widget.set_classes("status-error")
+            return False
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        """Handle live path validation on input change."""
+        if event.input.id in ("structure-input", "model-input"):
+            self._validate_path(event.input.id, event.value)
+
+    def on_mount(self) -> None:
+        """Initialize and validate paths on mount."""
+        # Initial validation of pre-filled values
+        structure_input = self.query_one("#structure-input", Input)
+        model_input = self.query_one("#model-input", Input)
+        self._validate_path("structure-input", structure_input.value)
+        self._validate_path("model-input", model_input.value)
+
     def _save_and_run(self) -> None:
         """Save configuration and run calculation."""
         # Get file paths
@@ -198,10 +265,23 @@ class ConfigScreen(Screen):
             self.notify("Please specify a model file", severity="error")
             return
 
-        # Save to config
-        self.app.update_config("structure_file", structure)
-        self.app.update_config("model_file", model)
-        self.app.update_config("output_dir", output)
+        # Resolve paths to absolute paths
+        structure_path = Path(structure.strip()).resolve()
+        model_path = Path(model.strip()).resolve()
+        output_path = Path(output.strip()).resolve()
+
+        if not structure_path.exists():
+            self.notify(f"Structure file not found: {structure_path}", severity="error")
+            return
+
+        if not model_path.exists():
+            self.notify(f"Model file not found: {model_path}", severity="error")
+            return
+
+        # Save absolute paths to config
+        self.app.update_config("structure_file", str(structure_path))
+        self.app.update_config("model_file", str(model_path))
+        self.app.update_config("output_dir", str(output_path))
 
         # Get job name
         job_name = self.query_one("#job-name-input", Input).value
