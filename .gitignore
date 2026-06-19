@@ -118,7 +118,8 @@ env.yml
 docs/legacy_tutorials/videos/
 
 # No ASE dbs, or OG LMDBs!
-/*.pt
+*.pt
+*.pth
 *.lmdb
 *.lmdb-lock
 *.aselmdb
@@ -149,4 +150,7 @@ _build
 .venv/
 .ruff_cache/
 .uv/
+
+# Superpowers working directory
+.superpowers/
 
