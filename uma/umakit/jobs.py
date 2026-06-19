@@ -12,6 +12,7 @@ disk-persisted state for attach/kill/clean operations.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import signal
@@ -69,6 +70,11 @@ class JobManager:
         error: str | None = None,
         finished_at: str | None = None,
     ) -> None:
+        # Preserve original started_at if updating an existing job
+        existing = self._read_job_state(job_id)
+        original_started_at = existing["started_at"] if existing else None
+        started_at_val = original_started_at or datetime.now().isoformat()
+
         data = {
             "job_id": job_id,
             "status": status.value,
@@ -78,7 +84,7 @@ class JobManager:
             "natoms": natoms,
             "pid": pid,
             "device": device,
-            "started_at": datetime.now().isoformat(),
+            "started_at": started_at_val,
             "finished_at": finished_at,
             "log_file": str(self._log_file(job_id)),
             "progress": progress or {},
@@ -170,10 +176,9 @@ class JobManager:
             return False
 
         pid = data["pid"]
-        cmd = self._build_kill_cmd(pid)
 
         try:
-            subprocess.run(cmd, check=False)
+            self._kill_process(pid)
             self._write_job_state(
                 job_id=job_id,
                 status=JobStatus.CANCELLED,
@@ -189,14 +194,13 @@ class JobManager:
         except Exception:
             return False
 
-    def _build_kill_cmd(self, pid: int) -> list[str]:
-        """Build platform-appropriate kill command."""
+    def _kill_process(self, pid: int) -> None:
+        """Kill a process by PID, platform-appropriate."""
         if sys.platform == "win32":
-            return ["taskkill", "/PID", str(pid), "/F"]
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False)
         else:
-            # Can't return a signal; use os.kill for Unix
-            os.kill(pid, signal.SIGTERM)
-            return ["kill", str(pid)]
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGTERM)
 
     def tail_log(self, job_id: str, lines: int = 50) -> str:
         """Return the last N lines of the job log."""

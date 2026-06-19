@@ -23,12 +23,8 @@ from pathlib import Path
 
 from ase.io import read
 
-from umakit.calculator import UMACalculator
 from umakit.config import IncarConfig, get_default_config
 from umakit.engine import CalculationEngine, EngineConfig
-from umakit.runners.md import MDRunner
-from umakit.runners.optimization import OptimizationRunner
-from umakit.runners.singlepoint import SinglePointRunner
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -451,73 +447,41 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"Atoms: {len(atoms)}")
     print()
 
-    # Setup calculator
-    model_path = config.get_str("MODEL_PATH", "uma-s-1.pt")
-    task = config.get_str("TASK", "omat")
-    device = config.get_str("DEVICE", "cpu")
-    inference_mode = config.get_str("INFERENCE_MODE", "default")
-
-    print(f"Loading model: {model_path}")
-    try:
-        calculator = UMACalculator(
-            model_path=model_path,
-            task=task,
-            device=device,
-            inference_mode=inference_mode,
-        )
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        return 1
-
     # Determine calculation type
     calc_type = config.get_str("CALC_TYPE", "sp").lower()
-
-    # Run calculation
     output_dir = Path(args.output)
-
-    # Get job name from config if available
     job_name = config.get_str("JOB_NAME", None)
 
-    if calc_type == "sp":
-        runner = SinglePointRunner(
-            calculator,
-            output_dir=output_dir,
-            verbose=True,
-            job_name=job_name,
-        )
-        runner.run(atoms)
-    elif calc_type == "opt":
-        runner = OptimizationRunner(
-            calculator,
-            fmax=config.get_float("FMAX", 0.05),
-            max_steps=config.get_int("MAX_STEPS", 500),
-            optimizer=config.get_str("OPT_ALGO", "FIRE"),
-            cell_opt=config.get_bool("CELL_OPT", False),
-            fix_symmetry=config.get_bool("FIX_SYMMETRY", False),
-            output_dir=output_dir,
-            verbose=True,
-            job_name=job_name,
-        )
-        runner.run(atoms)
-    elif calc_type == "md":
-        runner = MDRunner(
-            calculator,
-            ensemble=config.get_str("MD_ENSEMBLE", "NVT"),
-            temperature=config.get_float("TEMPERATURE", 300.0),
-            timestep=config.get_float("TIMESTEP", 1.0),
-            steps=config.get_int("STEPS", 1000),
-            friction=config.get_float("FRICTION", 0.001),
-            save_interval=config.get_int("SAVE_INTERVAL", 10),
-            output_dir=output_dir,
-            verbose=True,
-            job_name=job_name,
-        )
-        runner.run(atoms)
-    else:
-        print(f"Error: Unknown calculation type: {calc_type}")
-        return 1
+    engine_config = EngineConfig(
+        calc_type=calc_type,
+        model_path=Path(config.get_str("MODEL_PATH", "uma-s-1.pt")),
+        task=config.get_str("TASK", "omat"),
+        device=config.get_str("DEVICE", "cpu"),
+        inference_mode=config.get_str("INFERENCE_MODE", "default"),
+        output_dir=output_dir,
+        job_name=job_name,
+        options={
+            "fmax": config.get_float("FMAX", 0.05),
+            "max_steps": config.get_int("MAX_STEPS", 500),
+            "optimizer": config.get_str("OPT_ALGO", "FIRE"),
+            "cell_opt": config.get_bool("CELL_OPT", False),
+            "fix_symmetry": config.get_bool("FIX_SYMMETRY", False),
+            "ensemble": config.get_str("MD_ENSEMBLE", "NVT"),
+            "temperature": config.get_float("TEMPERATURE", 300.0),
+            "timestep": config.get_float("TIMESTEP", 1.0),
+            "steps": config.get_int("STEPS", 1000),
+            "friction": config.get_float("FRICTION", 0.001),
+            "save_interval": config.get_int("SAVE_INTERVAL", 10),
+        },
+    )
 
-    return 0
+    try:
+        engine = CalculationEngine.from_config(engine_config)
+        engine.run(atoms)
+        return 0
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
 
 
 def cmd_sp(args: argparse.Namespace) -> int:
