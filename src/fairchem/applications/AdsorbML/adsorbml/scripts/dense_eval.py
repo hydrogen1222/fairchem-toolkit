@@ -1,10 +1,9 @@
-"""
-Copyright (c) Meta Platforms, Inc. and affiliates.
+"""Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
-"""
-"""
+
+
 AdsorbML evaluation script. This script expects the results-file to be
 organized in a very specific structure in order to evaluate successfully.
 
@@ -160,12 +159,12 @@ def compute_hybrid_success(ml_data, dft_data, k):
     for kk in success_rates:
         print(f"Top-k = {kk}")
         print("=" * 50)
-        print(f"Success Rate (%): {100*success_rates[kk][0]}")
+        print(f"Success Rate (%): {100 * success_rates[kk][0]}")
         print(
-            f"DFT Speedup (SCF): {total_ground_truth_scf_calls/ml_dft_calls[kk]['scf']}"
+            f"DFT Speedup (SCF): {total_ground_truth_scf_calls / ml_dft_calls[kk]['scf']}"
         )
         print(
-            f"DFT Speedup (Ionic): {total_ground_truth_ionic_calls/ml_dft_calls[kk]['ionic']}\n"
+            f"DFT Speedup (Ionic): {total_ground_truth_ionic_calls / ml_dft_calls[kk]['ionic']}\n"
         )
 
     return success_rates, ml_dft_calls
@@ -210,7 +209,7 @@ def compute_valid_ml_success(ml_data, dft_data):
     success_rates[1] /= len(dft_data)
 
     print("=" * 50)
-    print(f"ML Success Rate (%): {100*success_rates[0]}")
+    print(f"ML Success Rate (%): {100 * success_rates[0]}")
 
 
 def get_dft_data(targets):

@@ -144,3 +144,9 @@ package-lock.json
 bulks.pkl
 # MyST build outputs
 _build
+
+# Modern Python toolings
+.venv/
+.ruff_cache/
+.uv/
+

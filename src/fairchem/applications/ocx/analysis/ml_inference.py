@@ -3,8 +3,9 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
+
+The script used to perform inference for HER
 """
-"""The script used to perform inference for HER"""
 
 from __future__ import annotations
 
@@ -18,13 +19,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from fairchem.applications.ocx.core.data_handling import load_and_preprocess_data
-from fairchem.applications.ocx.core.features import add_el_features
-from fairchem.applications.ocx.core.voltage import get_she
 from scipy.stats import linregress
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
+
+from fairchem.applications.ocx.core.data_handling import load_and_preprocess_data
+from fairchem.applications.ocx.core.features import add_el_features
+from fairchem.applications.ocx.core.voltage import get_she
 
 plt.rc("text", usetex=False)
 plt.rc("font", family="serif", size=10)
@@ -42,9 +44,9 @@ def get_computational_df_to_predict(computational_file: str):
 
     """
     # Load data
-    if computational_file.split(".")[-1] == "csv":
+    if computational_file.rsplit(".", maxsplit=1)[-1] == "csv":
         df = pd.read_csv(computational_file, low_memory=False)
-    elif computational_file.split(".")[-1] == "pkl":
+    elif computational_file.rsplit(".", maxsplit=1)[-1] == "pkl":
         df = pd.read_pickle(computational_file)
     else:
         raise NotImplementedError(
@@ -241,7 +243,7 @@ if __name__ == "__main__":
     ex_var = model.explained_variance_ratio_[0]
 
     print(
-        f"{ex_var*100:1.0f} % of the variance is explained by the first principal component"
+        f"{ex_var * 100:1.0f} % of the variance is explained by the first principal component"
     )
 
     train_x = model.transform(df_expt[features])

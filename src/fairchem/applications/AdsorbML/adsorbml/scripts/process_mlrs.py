@@ -3,8 +3,7 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
-"""
-"""
+
 This script processes ML relaxations and sets it up for the next step.
 - Reads final energy and structure for each relaxation
 - Filters out anomalies
@@ -31,8 +30,9 @@ from collections import defaultdict
 
 import numpy as np
 from ase.io import read
-from fairchem.data.oc.utils.flag_anomaly import DetectTrajAnomaly
 from tqdm import tqdm
+
+from fairchem.data.oc.utils.flag_anomaly import DetectTrajAnomaly
 
 SURFACE_CHANGE_CUTOFF_MULTIPLIER = 1.5
 DESORPTION_CUTOFF_MULTIPLIER = 1.5

@@ -3,8 +3,7 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
-"""
-"""
+
 A python script to run a validation of the ML NEB model on a set of NEB calculations.
 This script has not been written to run in parallel, but should be modified to do so.
 """
@@ -18,9 +17,10 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pandas as pd
 from ase.io import read
-from ase.optimize import BFGS
-from fairchem.core import pretrained_mlip, FAIRChemCalculator
 from ase.mep import DyNEB
+from ase.optimize import BFGS
+
+from fairchem.core import FAIRChemCalculator, pretrained_mlip
 
 if TYPE_CHECKING:
     import ase
@@ -76,7 +76,7 @@ def get_results_sp(df2: pd.DataFrame):
         f"{prop_05:1.1f}%",
         f"{prop_1_uc_f:1.1f}%",
         f"{prop_05_uc_f:1.1f}%",
-        f"{100*n_converged/n_calculated:1.0f}%",
+        f"{100 * n_converged / n_calculated:1.0f}%",
     )
 
 
@@ -130,7 +130,7 @@ def get_results_ml(df2):
         f"{prop_05:1.1f}%",
         f"{prop_1_uc_f:1.1f}%",
         f"{prop_05_uc_f:1.1f}%",
-        f"{100*n_converged/n_calculated:1.0f}%",
+        f"{100 * n_converged / n_calculated:1.0f}%",
     )
 
 
@@ -146,13 +146,8 @@ def all_converged(row, ml=True):
     Returns:
         bool: whether the system is converged
     """
-    if (
-        row.converged_ml
-        and row.converged
-        and ml
-        or row.converged_ml
-        and row.converged
-        and (not np.isnan(row.E_TS_SP))
+    if (row.converged_ml and row.converged and ml) or (
+        row.converged_ml and row.converged and (not np.isnan(row.E_TS_SP))
     ):
         return True
     return False
@@ -330,11 +325,11 @@ if __name__ == "__main__":
             neb_frames = read(args.trajectory_path + "/" + file, index=":")[0:10]
 
             conv = False
-            
+
             for image in neb_frames:
                 image.calc = FAIRChemCalculator(predictor, task_name="oc20")
             neb = DyNEB(neb_frames, k=k)
-            
+
             # Optimize:
             optimizer = BFGS(
                 neb,
@@ -348,8 +343,9 @@ if __name__ == "__main__":
 
             # If single points are to be performed, perform them
             if args.get_ts_sp:
-                from fairchem.data.oc.utils.vasp import calculate_surface_k_points
                 from vasp_interactive import VaspInteractive
+
+                from fairchem.data.oc.utils.vasp import calculate_surface_k_points
 
                 os.makedirs(
                     f"{args.output_file_path}/{model_id}/vasp_files/{neb_id}",

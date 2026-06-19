@@ -3,8 +3,7 @@ Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
-"""
-"""
+
 Driver script to evaluate the performance of ML models on predicting
 experimental products for HER and CO2RR in the OCx24 dataset.
 """
@@ -18,13 +17,14 @@ import os
 import numpy as np
 import pandas as pd
 import plotly.express as px
-from fairchem.applications.ocx.core.data_handling import load_and_preprocess_data
-from fairchem.applications.ocx.core.features import add_el_features
 from sklearn import model_selection, preprocessing
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error
 from sklearn.pipeline import Pipeline
+
+from fairchem.applications.ocx.core.data_handling import load_and_preprocess_data
+from fairchem.applications.ocx.core.features import add_el_features
 
 logging.basicConfig(level=logging.INFO)
 
