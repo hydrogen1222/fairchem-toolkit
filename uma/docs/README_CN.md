@@ -899,20 +899,33 @@ CUDA_VISIBLE_DEVICES=0 uma_calc sp structure.cif --model uma-s-1.pt --device cud
 
 #### "no kernel image is available for execution on the device"
 
-**原因：** GPU 太旧，PyTorch 2.x 预编译 CUDA 二进制不支持。PyTorch 2.x 要求计算能力（Compute Capability, CC）>= 7.0（Volta 架构或更新）。Pascal 架构 GPU（CC 6.x）**不受支持**——包括 P104-100、P100、GTX 1080 Ti、GTX 1070 等。
+**原因：** PyTorch 预编译的 CUDA 内核不包含你的 GPU 架构。通常发生在 **PyTorch 2.7+ 配合 CUDA 12.8**，该版本从默认构建中移除了 Pascal GPU（CC 6.x：GTX 10xx 系列、P104-100、P100 等）。
 
-**检查 GPU 的计算能力：**
+> **Pascal GPU 并非天生不兼容**——它们在 PyTorch 2.4–2.6（CUDA 12.1–12.6）上完全正常工作。
+
+**诊断：**
 ```bash
-uv run python -c "import torch; print(torch.cuda.get_device_capability(0))"
+uv run python -c "
+import torch
+print(f'PyTorch: {torch.__version__}, CUDA: {torch.version.cuda}')
+print(f'GPU: {torch.cuda.get_device_name(0)}')
+print(f'Compute Capability: {torch.cuda.get_device_capability(0)}')
+print(f'Arch list: {torch.cuda.get_arch_list()}')
+"
 ```
-如果结果是 `(6, 1)` 或更低，则 GPU 不兼容。
+如果你的 GPU 的 `sm_xx` 不在 arch list 中，说明当前构建缺少该架构的内核。
 
 **解决方案：**
-1. 使用 CPU：`--device cpu`（最简单）
-2. 使用更新的 GPU（Volta/Turing/Ampere/Ada/Hopper 架构）
-3. 从源码编译 PyTorch，设置 `TORCH_CUDA_ARCH_LIST="6.1"`（高级）
-
-UMAKit 会自动检测并打印清晰的错误信息，然后再尝试计算。
+1. 尝试 PyTorch 2.8 的其他 CUDA 变体（CUDA 12.4 可能仍包含 Pascal 内核）：
+   ```bash
+   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu124
+   ```
+2. 降级到 PyTorch 2.6 + CUDA 12.6（确认支持 Pascal）：
+   ```bash
+   pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
+   ```
+3. 使用 CPU：`--device cpu`
+4. 从源码编译 PyTorch：设置 `TORCH_CUDA_ARCH_LIST="6.1"`
 
 #### CUDA 显存不足
 

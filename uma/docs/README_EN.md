@@ -1074,20 +1074,33 @@ CUDA_VISIBLE_DEVICES=0,1 uma_calc sp structure.cif --model uma-s-1.pt --device c
 
 #### "no kernel image is available for execution on the device"
 
-**Cause:** Your GPU is too old for PyTorch 2.x pre-built CUDA binaries. PyTorch 2.x requires Compute Capability (CC) >= 7.0 (Volta architecture or newer). Pascal GPUs (CC 6.x) are **not supported** — this includes P104-100, P100, GTX 1080 Ti, GTX 1070, etc.
+**Cause:** Your PyTorch build does not include pre-compiled CUDA kernels for your GPU's architecture (Compute Capability). This typically happens with **PyTorch 2.7+ with CUDA 12.8**, which dropped Pascal GPUs (CC 6.x: GTX 10xx series, P104-100, P100, etc.) from its default build.
 
-**Check your GPU's CC:**
+> **Pascal GPUs are NOT inherently incompatible** — they work fine with PyTorch 2.4–2.6 (CUDA 12.1–12.6).
+
+**Diagnose:**
 ```bash
-uv run python -c "import torch; print(torch.cuda.get_device_capability(0))"
+uv run python -c "
+import torch
+print(f'PyTorch: {torch.__version__}, CUDA: {torch.version.cuda}')
+print(f'GPU: {torch.cuda.get_device_name(0)}')
+print(f'Capability: {torch.cuda.get_device_capability(0)}')
+print(f'Arch list: {torch.cuda.get_arch_list()}')
+"
 ```
-If the result is `(6, 1)` or lower, your GPU is incompatible.
+If your GPU's `sm_xx` is not in the arch list, the build lacks kernels for it.
 
 **Solutions:**
-1. Use CPU: `--device cpu` (simplest)
-2. Use a newer GPU (Volta/Turing/Ampere/Ada/Hopper architecture)
-3. Build PyTorch from source with `TORCH_CUDA_ARCH_LIST="6.1"` (advanced)
-
-UMAKit detects this automatically and prints a clear error message before attempting the calculation.
+1. Try a different PyTorch 2.8 CUDA variant (CUDA 12.4 may still include Pascal kernels):
+   ```bash
+   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu124
+   ```
+2. Downgrade to PyTorch 2.6 + CUDA 12.6 (confirmed Pascal support):
+   ```bash
+   pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
+   ```
+3. Use CPU: `--device cpu`
+4. Build PyTorch from source with `TORCH_CUDA_ARCH_LIST="6.1"`
 
 #### CUDA Out of Memory
 
