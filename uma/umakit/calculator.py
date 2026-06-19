@@ -95,6 +95,47 @@ class UMACalculator:
                 f"Must be one of: {', '.join(self.VALID_INFERENCE_MODES)}"
             )
 
+    def _check_gpu_compatibility(self) -> None:
+        """Check if the GPU supports the PyTorch CUDA binaries.
+
+        PyTorch 2.x pre-built binaries require Compute Capability >= 7.0
+        (Volta or newer). Pascal GPUs (CC 6.x) like P104-100, P100, GTX 10xx
+        will get "no kernel image is available" errors.
+        """
+        if self.device not in ("cuda", "gpu"):
+            return
+
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                return
+
+            major, minor = torch.cuda.get_device_capability(0)
+            cc = major + minor / 10.0
+
+            if cc < 7.0:
+                gpu_name = torch.cuda.get_device_name(0)
+                raise RuntimeError(
+                    f"\n{'=' * 65}\n"
+                    f"GPU NOT SUPPORTED: {gpu_name}\n"
+                    f"{'=' * 65}\n\n"
+                    f"Your GPU has Compute Capability {major}.{minor} (Pascal or older).\n"
+                    f"PyTorch 2.x pre-built CUDA binaries require CC >= 7.0 (Volta+).\n\n"
+                    f"Options:\n"
+                    f"  1. Use CPU: --device cpu\n"
+                    f"  2. Use a newer GPU (Volta/Turing/Ampere/Ada/Hopper)\n"
+                    f'  3. Build PyTorch from source with TORCH_CUDA_ARCH_LIST="6.1"\n'
+                    f"\n"
+                    f"See: https://pytorch.org/get-started/locally/\n"
+                    f"{'=' * 65}\n"
+                )
+        except RuntimeError:
+            raise
+        except Exception:
+            # If we can't check GPU compat, let the calculation fail naturally
+            pass
+
     def load_predictor(self) -> MLIPPredictUnit:
         """Load the prediction unit from checkpoint.
 
@@ -102,6 +143,7 @@ class UMACalculator:
             Loaded MLIPPredictUnit
         """
         if self._predictor is None:
+            self._check_gpu_compatibility()
             if self.inference_mode == "turbo":
                 settings = InferenceSettings(
                     tf32=True,

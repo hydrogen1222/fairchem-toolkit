@@ -1072,6 +1072,23 @@ CUDA_VISIBLE_DEVICES=0,1 uma_calc sp structure.cif --model uma-s-1.pt --device c
 3. Try the original POSCAR format instead of CIF
 4. Check that PBC is set correctly (use `omat` task for periodic, `omol` for molecules)
 
+#### "no kernel image is available for execution on the device"
+
+**Cause:** Your GPU is too old for PyTorch 2.x pre-built CUDA binaries. PyTorch 2.x requires Compute Capability (CC) >= 7.0 (Volta architecture or newer). Pascal GPUs (CC 6.x) are **not supported** — this includes P104-100, P100, GTX 1080 Ti, GTX 1070, etc.
+
+**Check your GPU's CC:**
+```bash
+uv run python -c "import torch; print(torch.cuda.get_device_capability(0))"
+```
+If the result is `(6, 1)` or lower, your GPU is incompatible.
+
+**Solutions:**
+1. Use CPU: `--device cpu` (simplest)
+2. Use a newer GPU (Volta/Turing/Ampere/Ada/Hopper architecture)
+3. Build PyTorch from source with `TORCH_CUDA_ARCH_LIST="6.1"` (advanced)
+
+UMAKit detects this automatically and prints a clear error message before attempting the calculation.
+
 #### CUDA Out of Memory
 
 **Cause:** The model + structure requires more GPU memory than available.

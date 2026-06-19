@@ -897,6 +897,23 @@ CUDA_VISIBLE_DEVICES=0 uma_calc sp structure.cif --model uma-s-1.pt --device cud
 2. 确保原子间距在 ~6 Å 以内
 3. 周期性体系用 `omat`，分子用 `omol`
 
+#### "no kernel image is available for execution on the device"
+
+**原因：** GPU 太旧，PyTorch 2.x 预编译 CUDA 二进制不支持。PyTorch 2.x 要求计算能力（Compute Capability, CC）>= 7.0（Volta 架构或更新）。Pascal 架构 GPU（CC 6.x）**不受支持**——包括 P104-100、P100、GTX 1080 Ti、GTX 1070 等。
+
+**检查 GPU 的计算能力：**
+```bash
+uv run python -c "import torch; print(torch.cuda.get_device_capability(0))"
+```
+如果结果是 `(6, 1)` 或更低，则 GPU 不兼容。
+
+**解决方案：**
+1. 使用 CPU：`--device cpu`（最简单）
+2. 使用更新的 GPU（Volta/Turing/Ampere/Ada/Hopper 架构）
+3. 从源码编译 PyTorch，设置 `TORCH_CUDA_ARCH_LIST="6.1"`（高级）
+
+UMAKit 会自动检测并打印清晰的错误信息，然后再尝试计算。
+
 #### CUDA 显存不足
 
 **解决方案：**
