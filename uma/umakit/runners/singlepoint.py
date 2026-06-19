@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from typing import Any
 
     from ase import Atoms
+    from umakit.protocols import ProgressCallback
 
 
 class SinglePointRunner(BaseRunner):
@@ -48,6 +49,7 @@ class SinglePointRunner(BaseRunner):
         verbose: bool = True,
         job_name: str | None = None,
         log_fn: Any | None = None,
+        progress_callback: ProgressCallback | None = None,
     ):
         """Initialize single point runner.
 
@@ -60,8 +62,11 @@ class SinglePointRunner(BaseRunner):
             verbose: Whether to print progress messages
             job_name: Optional job name for organizing results
             log_fn: Optional callback function for custom log output
+            progress_callback: Optional callback for progress events
         """
-        super().__init__(calculator, output_dir, verbose, job_name, log_fn)
+        super().__init__(
+            calculator, output_dir, verbose, job_name, log_fn, progress_callback
+        )
         self.write_outcar = write_outcar
         self.write_json = write_json
         self.write_contcar = write_contcar

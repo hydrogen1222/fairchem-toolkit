@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from typing import Any
 
     from ase import Atoms
+    from umakit.protocols import ProgressCallback
 
 
 class OptimizationRunner(BaseRunner):
@@ -76,6 +77,7 @@ class OptimizationRunner(BaseRunner):
         verbose: bool = True,
         job_name: str | None = None,
         log_fn: Any | None = None,
+        progress_callback: ProgressCallback | None = None,
     ):
         """Initialize optimization runner.
 
@@ -94,8 +96,11 @@ class OptimizationRunner(BaseRunner):
             verbose: Whether to print progress messages
             job_name: Optional job name for organizing results
             log_fn: Optional callback function for custom log output
+            progress_callback: Optional callback for progress events
         """
-        super().__init__(calculator, output_dir, verbose, job_name, log_fn)
+        super().__init__(
+            calculator, output_dir, verbose, job_name, log_fn, progress_callback
+        )
         self.fmax = fmax
         self.max_steps = max_steps
         self.optimizer_name = optimizer.lower()

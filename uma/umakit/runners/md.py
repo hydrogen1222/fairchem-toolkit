@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from typing import Any
 
     from ase import Atoms
+    from umakit.protocols import ProgressCallback
 
 
 class MDRunner(BaseRunner):
@@ -81,6 +82,7 @@ class MDRunner(BaseRunner):
         pre_relax_steps: int = 50,
         pre_relax_fmax: float = 0.1,
         log_fn: Any | None = None,
+        progress_callback: ProgressCallback | None = None,
     ):
         """Initialize MD runner.
 
@@ -103,8 +105,11 @@ class MDRunner(BaseRunner):
             pre_relax_steps: Maximum steps for pre-relaxation
             pre_relax_fmax: Force threshold for pre-relaxation
             log_fn: Optional callback function for custom log output
+            progress_callback: Optional callback for progress events
         """
-        super().__init__(calculator, output_dir, verbose, job_name, log_fn)
+        super().__init__(
+            calculator, output_dir, verbose, job_name, log_fn, progress_callback
+        )
         self.ensemble = ensemble.lower()
         self.temperature = temperature
         self.timestep = timestep * units.fs  # Convert to ASE units
