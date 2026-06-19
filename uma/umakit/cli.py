@@ -378,6 +378,19 @@ Examples:
         description="Launch interactive terminal UI for visual configuration",
     )
 
+    # jobs command
+    jobs_parser = subparsers.add_parser("jobs", help="List background jobs")
+    jobs_parser.add_argument(
+        "--refresh", type=int, default=0, help="Auto-refresh interval in seconds"
+    )
+
+    # kill command
+    kill_parser = subparsers.add_parser("kill", help="Kill a background job")
+    kill_parser.add_argument("job_id", help="Job ID to kill")
+
+    # clean command
+    subparsers.add_parser("clean", help="Remove completed/failed job records")
+
     return parser
 
 
@@ -689,6 +702,51 @@ def cmd_tui(args: argparse.Namespace) -> int:
     return app.run()
 
 
+def cmd_jobs(args: argparse.Namespace) -> int:
+    """List background jobs."""
+    from umakit.jobs import JobManager  # noqa: PLC0415
+
+    mgr = JobManager()
+    jobs = mgr.list_jobs()
+    if not jobs:
+        print("No jobs found.")
+        return 0
+    print(f"{'ID':<40} {'Status':<12} {'Type':<6} {'Formula':<12} {'Device'}")
+    print("-" * 90)
+    for j in jobs:
+        print(
+            f"{j['job_id']:<40} {j['status']:<12} {j.get('calc_type', ''):<6} {j.get('formula', ''):<12} {j.get('device', '')}"
+        )
+    return 0
+
+
+def cmd_kill(args: argparse.Namespace) -> int:
+    """Kill a background job."""
+    from umakit.jobs import JobManager  # noqa: PLC0415
+
+    mgr = JobManager()
+    ok = mgr.kill_job(args.job_id)
+    if ok:
+        print(f"Killed: {args.job_id}")
+        return 0
+    else:
+        print(f"Failed to kill: {args.job_id}")
+        return 1
+
+
+def cmd_clean(args: argparse.Namespace) -> int:
+    """Remove completed/failed job records."""
+    from umakit.jobs import JobManager  # noqa: PLC0415
+
+    mgr = JobManager()
+    removed = mgr.clean()
+    if removed:
+        print(f"Removed {len(removed)} completed/failed job records.")
+    else:
+        print("No completed/failed jobs to clean.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Main entry point."""
     # Check if running in TUI mode (no command, or explicit 'tui' command)
@@ -730,6 +788,9 @@ def main(argv: list[str] | None = None) -> int:
         "md": cmd_md,
         "batch": cmd_batch,
         "template": cmd_template,
+        "jobs": cmd_jobs,
+        "kill": cmd_kill,
+        "clean": cmd_clean,
     }
 
     handler = commands.get(args.command)

@@ -19,9 +19,8 @@ import numpy as np
 from ase.io import read
 from tqdm import tqdm
 
-from umakit.runners.base import BaseRunner
-from umakit.runners.singlepoint import SinglePointRunner
 from umakit.runners.optimization import OptimizationRunner
+from umakit.runners.singlepoint import SinglePointRunner
 from umakit.writers.json_writer import JsonWriter
 
 if TYPE_CHECKING:
@@ -143,44 +142,88 @@ class BatchRunner:
         success_count = 0
         failed_count = 0
 
-        # Progress bar
-        iterator = tqdm(files, desc="Processing structures") if self.verbose else files
+        if self.parallel and self.max_workers > 1:
+            from concurrent.futures import (  # noqa: PLC0415
+                ThreadPoolExecutor,
+                as_completed,
+            )
 
-        for filepath in iterator:
-            filepath = Path(filepath)
-
-            try:
-                # Read structure
+            def process_one(filepath):
+                filepath = Path(filepath)
                 atoms = read(filepath)
-
-                # Create sub-directory for this calculation
                 sub_dir = self.output_dir / filepath.stem
                 sub_dir.mkdir(exist_ok=True)
-
-                # Run calculation
                 result = self._run_single(atoms, sub_dir, filepath.stem)
-
-                results_list.append({
+                return {
                     "filename": filepath.name,
                     "formula": atoms.get_chemical_formula(),
                     "natoms": len(atoms),
                     "success": True,
                     **result,
-                })
-                success_count += 1
+                }
 
-            except Exception as e:
-                error_msg = f"{type(e).__name__}: {str(e)}"
-                results_list.append({
-                    "filename": filepath.name,
-                    "success": False,
-                    "error": error_msg,
-                    "traceback": traceback.format_exc(),
-                })
-                failed_count += 1
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = {executor.submit(process_one, f): f for f in files}
+                for future in as_completed(futures):
+                    filepath = futures[future]
+                    try:
+                        result = future.result()
+                        results_list.append(result)
+                        success_count += 1
+                    except Exception as e:
+                        results_list.append(
+                            {
+                                "filename": Path(filepath).name,
+                                "success": False,
+                                "error": f"{type(e).__name__}: {e!s}",
+                            }
+                        )
+                        failed_count += 1
+        else:
+            # Progress bar
+            iterator = (
+                tqdm(files, desc="Processing structures") if self.verbose else files
+            )
 
-                if self.verbose:
-                    print(f"\nError processing {filepath.name}: {error_msg}")
+            for fp in iterator:
+                filepath = Path(fp)
+
+                try:
+                    # Read structure
+                    atoms = read(filepath)
+
+                    # Create sub-directory for this calculation
+                    sub_dir = self.output_dir / filepath.stem
+                    sub_dir.mkdir(exist_ok=True)
+
+                    # Run calculation
+                    result = self._run_single(atoms, sub_dir, filepath.stem)
+
+                    results_list.append(
+                        {
+                            "filename": filepath.name,
+                            "formula": atoms.get_chemical_formula(),
+                            "natoms": len(atoms),
+                            "success": True,
+                            **result,
+                        }
+                    )
+                    success_count += 1
+
+                except Exception as e:
+                    error_msg = f"{type(e).__name__}: {e!s}"
+                    results_list.append(
+                        {
+                            "filename": filepath.name,
+                            "success": False,
+                            "error": error_msg,
+                            "traceback": traceback.format_exc(),
+                        }
+                    )
+                    failed_count += 1
+
+                    if self.verbose:
+                        print(f"\nError processing {filepath.name}: {error_msg}")
 
         # Write summary
         summary = {
@@ -226,7 +269,9 @@ class BatchRunner:
                 **self.calc_kwargs,
             )
         else:
-            raise NotImplementedError(f"Batch mode for {self.calc_type} not yet implemented")
+            raise NotImplementedError(
+                f"Batch mode for {self.calc_type} not yet implemented"
+            )
 
         # Run calculation
         results = runner.run(atoms)
@@ -268,4 +313,6 @@ class BatchRunner:
 
         if self.verbose:
             print(f"\nBatch summary written to: {json_path}")
-            print(f"Total: {summary['total']}, Success: {summary['success']}, Failed: {summary['failed']}")
+            print(
+                f"Total: {summary['total']}, Success: {summary['success']}, Failed: {summary['failed']}"
+            )
