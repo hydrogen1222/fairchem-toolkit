@@ -12,8 +12,6 @@ including output directory management and logging.
 
 from __future__ import annotations
 
-import sys
-import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -51,6 +49,7 @@ class BaseRunner(ABC):
         output_dir: Path | str = ".",
         verbose: bool = True,
         job_name: str | None = None,
+        log_fn: Any | None = None,
     ):
         """Initialize base runner.
 
@@ -59,10 +58,12 @@ class BaseRunner(ABC):
             output_dir: Directory for output files
             verbose: Whether to print progress messages
             job_name: Optional job name for organizing results
+            log_fn: Optional callback function for custom log output
         """
         self.calculator = calculator
         self.job_name = job_name
         self.verbose = verbose
+        self.log_fn = log_fn
 
         # Build output directory path
         base_dir = Path(output_dir)
@@ -75,13 +76,13 @@ class BaseRunner(ABC):
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def log(self, message: str, level: str = "info") -> None:
-        """Print log message if verbose mode is enabled.
+        """Print log message if verbose mode or log callback is enabled.
 
         Args:
             message: Message to print
             level: Log level (info, warning, error)
         """
-        if not self.verbose:
+        if not self.verbose and not self.log_fn:
             return
 
         prefix = {
@@ -90,7 +91,12 @@ class BaseRunner(ABC):
             "error": "ERROR: ",
         }.get(level, "  ")
 
-        print(f"{prefix}{message}")
+        formatted_msg = f"{prefix}{message}"
+
+        if self.log_fn:
+            self.log_fn(formatted_msg, level)
+        if self.verbose:
+            print(formatted_msg)
 
     def print_header(self, title: str) -> None:
         """Print section header.
@@ -98,11 +104,12 @@ class BaseRunner(ABC):
         Args:
             title: Section title
         """
-        if self.verbose:
-            print()
-            print("-" * 80)
-            print(f" {title}")
-            print("-" * 80)
+        if self.verbose or self.log_fn:
+            msg = f"\n{'-' * 80}\n {title}\n{'-' * 80}"
+            if self.log_fn:
+                self.log_fn(msg, "info")
+            if self.verbose:
+                print(msg)
 
     @abstractmethod
     def run(self, atoms: Atoms) -> dict[str, Any]:
@@ -114,7 +121,6 @@ class BaseRunner(ABC):
         Returns:
             Dictionary with calculation results
         """
-        pass
 
     def _prepare_atoms(self, atoms: Atoms) -> Atoms:
         """Prepare atoms for calculation.
@@ -139,7 +145,9 @@ class BaseRunner(ABC):
             # Log cell info for debugging
             cell = atoms.cell
             if cell.volume > 0:
-                self.log(f"Cell: {cell.lengths()[0]:.4f} x {cell.lengths()[1]:.4f} x {cell.lengths()[2]:.4f} Å")
+                self.log(
+                    f"Cell: {cell.lengths()[0]:.4f} x {cell.lengths()[1]:.4f} x {cell.lengths()[2]:.4f} Å"
+                )
             else:
                 raise ValueError("Invalid cell: zero volume. Check input structure.")
         elif task == "omol":

@@ -28,6 +28,7 @@ setup(
         "ase>=3.26.0",
         "numpy",
         "tqdm",
+        "textual>=0.40.0",
     ],
     extras_require={
         "dev": [

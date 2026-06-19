@@ -8,11 +8,13 @@ dependencies = [
     "fairchem-applications-adsorbml",
     "fairchem-applications-cattsunami",
     "fairchem-applications-ocx",
+    "umakit",
 ]
 
 [tool.uv.workspace]
 members = [
     "packages/*",
+    "uma",
 ]
 
 [tool.uv.sources]
@@ -28,3 +30,4 @@ fairchem-applications-fastcsp = { workspace = true }
 fairchem-applications-ocx = { workspace = true }
 fairchem-demo-ocpapi = { workspace = true }
 fairchem-lammps = { workspace = true }
+umakit = { workspace = true }

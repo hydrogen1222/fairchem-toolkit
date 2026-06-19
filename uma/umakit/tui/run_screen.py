@@ -9,19 +9,13 @@ LICENSE file in the root directory of this source tree.
 
 """Run screen for executing calculations with live output."""
 
-import sys
 import threading
 import traceback
-from pathlib import Path
-from typing import TYPE_CHECKING
 
 from ase.io import read
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
 from textual.widgets import Button, Log, ProgressBar, Static
-
-if TYPE_CHECKING:
-    from typing import Any
 
 
 class RunScreen(Screen):
@@ -35,23 +29,20 @@ class RunScreen(Screen):
         yield Container(
             Static(f"Running: {calc_type.upper()}", id="title"),
             Static(f"Structure: {structure}", id="subtitle"),
-
             # Progress bar
             Static("Progress:"),
             ProgressBar(total=100, id="progress-bar"),
             Static("Initializing...", id="status-text"),
-
             # Log output
             Static("Log Output:", classes="section-header"),
             Log(id="run-log"),
-
             # Action buttons
             Horizontal(
                 Button("◀ Cancel", variant="error", id="cancel-btn"),
                 Button("🔄 Back", id="back-btn", disabled=True),
-                id="action-buttons"
+                id="action-buttons",
             ),
-            id="run-container"
+            id="run-container",
         )
 
     def on_mount(self) -> None:
@@ -71,10 +62,12 @@ class RunScreen(Screen):
 
     def _update_progress(self, value: float, status: str = "") -> None:
         """Update progress bar."""
+
         def update():
             self.progress.update(progress=value)
             if status:
                 self.status.update(status)
+
         self.app.call_from_thread(update)
 
     def _run_calculation(self) -> None:
@@ -101,6 +94,7 @@ class RunScreen(Screen):
             def enable_back():
                 back_btn = self.query_one("#back-btn", Button)
                 back_btn.disabled = False
+
             self.app.call_from_thread(enable_back)
 
     def _run_sp(self) -> None:
@@ -125,12 +119,13 @@ class RunScreen(Screen):
             output_dir=self.app.get_config("output_dir"),
             verbose=False,
             job_name=self.app.get_config("job_name"),
+            log_fn=lambda msg, lvl="info": self._log(msg),
         )
 
         results = runner.run(atoms)
 
         self._update_progress(100, "Complete")
-        self._log(f"\n✅ Calculation complete!")
+        self._log("\n✅ Calculation complete!")
         self._log(f"Energy: {results['energy']:.6f} eV")
         self._log(f"Output: {self.app.get_config('output_dir')}")
 
@@ -161,6 +156,7 @@ class RunScreen(Screen):
             output_dir=self.app.get_config("output_dir"),
             verbose=False,
             job_name=self.app.get_config("job_name"),
+            log_fn=lambda msg, lvl="info": self._log(msg),
         )
 
         # Custom progress callback
@@ -169,7 +165,7 @@ class RunScreen(Screen):
         results = runner.run(atoms)
 
         self._update_progress(100, "Complete")
-        self._log(f"\n✅ Optimization complete!")
+        self._log("\n✅ Optimization complete!")
         self._log(f"Converged: {results['converged']}")
         self._log(f"Steps: {results['nsteps']}")
         self._log(f"Final energy: {results['energy']:.6f} eV")
@@ -205,6 +201,7 @@ class RunScreen(Screen):
             pre_relax=self.app.get_config("pre_relax", True),
             pre_relax_steps=self.app.get_config("pre_relax_steps", 50),
             pre_relax_fmax=self.app.get_config("pre_relax_fmax", 0.1),
+            log_fn=lambda msg, lvl="info": self._log(msg),
         )
 
         self._log(f"Ensemble: {self.app.get_config('ensemble')}")
@@ -217,7 +214,7 @@ class RunScreen(Screen):
         results = runner.run(atoms)
 
         self._update_progress(100, "Complete")
-        self._log(f"\n✅ MD simulation complete!")
+        self._log("\n✅ MD simulation complete!")
         self._log(f"Final temperature: {results['temperature']:.1f} K")
         self._log(f"Steps completed: {results['md_steps']}")
 

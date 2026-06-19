@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "umakit"
+version = "1.0.0"
+description = "VASP-like interface for FAIRChem UMA models"
+requires-python = ">=3.9"
+dependencies = [
+    "fairchem-core",
+    "ase>=3.26.0",
+    "numpy",
+    "tqdm",
+    "textual>=0.40.0",
+]
+
+[project.scripts]
+uma_calc = "umakit.cli:main"
