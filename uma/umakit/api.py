@@ -34,10 +34,7 @@ from typing import TYPE_CHECKING
 from ase import Atoms
 from ase.io import read
 
-from umakit.calculator import UMACalculator
-from umakit.runners.md import MDRunner
-from umakit.runners.optimization import OptimizationRunner
-from umakit.runners.singlepoint import SinglePointRunner
+from umakit.engine import CalculationEngine, EngineConfig
 
 if TYPE_CHECKING:
     from typing import Any
@@ -105,27 +102,21 @@ def run_single_point(
         >>> print(f"Energy: {results['energy']:.4f} eV")
     """
     atoms = _load_structure(structure)
-
     if verbose:
         print(f"System: {atoms.get_chemical_formula()}")
         print(f"Atoms: {len(atoms)}")
         print(f"Loading model: {model_path}")
 
-    calculator = UMACalculator(
-        model_path=model_path,
+    config = EngineConfig(
+        calc_type="sp",
+        model_path=Path(model_path),
         task=task,
         device=device,
-    )
-
-    runner = SinglePointRunner(
-        calculator,
-        output_dir=output_dir,
-        verbose=verbose,
+        output_dir=Path(output_dir),
         job_name=job_name,
-        **kwargs,
     )
-
-    return runner.run(atoms)
+    engine = CalculationEngine.from_config(config)
+    return engine.run(atoms)
 
 
 def run_optimization(
@@ -178,32 +169,28 @@ def run_optimization(
         >>> print(f"Final energy: {results['energy']:.4f} eV")
     """
     atoms = _load_structure(structure)
-
     if verbose:
         print(f"System: {atoms.get_chemical_formula()}")
         print(f"Atoms: {len(atoms)}")
         print(f"Loading model: {model_path}")
 
-    calculator = UMACalculator(
-        model_path=model_path,
+    config = EngineConfig(
+        calc_type="opt",
+        model_path=Path(model_path),
         task=task,
         device=device,
-    )
-
-    runner = OptimizationRunner(
-        calculator,
-        fmax=fmax,
-        max_steps=max_steps,
-        optimizer=optimizer,
-        cell_opt=cell_opt,
-        fix_symmetry=fix_symmetry,
-        output_dir=output_dir,
-        verbose=verbose,
+        output_dir=Path(output_dir),
         job_name=job_name,
-        **kwargs,
+        options={
+            "fmax": fmax,
+            "max_steps": max_steps,
+            "optimizer": optimizer,
+            "cell_opt": cell_opt,
+            "fix_symmetry": fix_symmetry,
+        },
     )
-
-    return runner.run(atoms)
+    engine = CalculationEngine.from_config(config)
+    return engine.run(atoms)
 
 
 def run_md(
@@ -260,35 +247,31 @@ def run_md(
         >>> print(f"Final temperature: {results['temperature']:.1f} K")
     """
     atoms = _load_structure(structure)
-
     if verbose:
         print(f"System: {atoms.get_chemical_formula()}")
         print(f"Atoms: {len(atoms)}")
         print(f"Loading model: {model_path}")
 
-    calculator = UMACalculator(
-        model_path=model_path,
+    config = EngineConfig(
+        calc_type="md",
+        model_path=Path(model_path),
         task=task,
         device=device,
-        inference_mode="turbo",  # Use turbo mode for MD
-    )
-
-    runner = MDRunner(
-        calculator,
-        ensemble=ensemble,
-        temperature=temperature,
-        timestep=timestep,
-        steps=steps,
-        friction=friction,
-        save_interval=save_interval,
-        output_dir=output_dir,
-        verbose=verbose,
+        inference_mode="turbo",
+        output_dir=Path(output_dir),
         job_name=job_name,
-        pre_relax=pre_relax,
-        **kwargs,
+        options={
+            "ensemble": ensemble,
+            "temperature": temperature,
+            "timestep": timestep,
+            "steps": steps,
+            "friction": friction,
+            "save_interval": save_interval,
+            "pre_relax": pre_relax,
+        },
     )
-
-    return runner.run(atoms)
+    engine = CalculationEngine.from_config(config)
+    return engine.run(atoms)
 
 
 def calculate_energy(
