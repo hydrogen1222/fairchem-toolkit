@@ -1,13 +1,10 @@
-from __future__ import annotations
-
 """
 Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
-"""
 
-"""Molecular dynamics runner.
+Molecular dynamics runner.
 
 Runs MD simulations using ASE's integrators:
 - NVT ensemble (Langevin dynamics)
@@ -15,6 +12,8 @@ Runs MD simulations using ASE's integrators:
 
 Outputs trajectories in multiple formats.
 """
+
+from __future__ import annotations
 
 import time
 from pathlib import Path
@@ -81,6 +80,7 @@ class MDRunner(BaseRunner):
         pre_relax: bool = True,
         pre_relax_steps: int = 50,
         pre_relax_fmax: float = 0.1,
+        log_fn: Any | None = None,
     ):
         """Initialize MD runner.
 
@@ -102,8 +102,9 @@ class MDRunner(BaseRunner):
             pre_relax: Whether to perform pre-relaxation before MD
             pre_relax_steps: Maximum steps for pre-relaxation
             pre_relax_fmax: Force threshold for pre-relaxation
+            log_fn: Optional callback function for custom log output
         """
-        super().__init__(calculator, output_dir, verbose, job_name)
+        super().__init__(calculator, output_dir, verbose, job_name, log_fn)
         self.ensemble = ensemble.lower()
         self.temperature = temperature
         self.timestep = timestep * units.fs  # Convert to ASE units

@@ -1,15 +1,14 @@
-from __future__ import annotations
-
 """
 Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
+
+Main TUI Application for UMA Calculator.
 """
 
-"""Main TUI Application for UMA Calculator."""
+from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual.app import App, ComposeResult
@@ -21,8 +20,8 @@ if TYPE_CHECKING:
     from typing import Any
 
 # Screen imports - done here to avoid circular imports
-from umakit.tui.main_screen import MainScreen, TemplateScreen
 from umakit.tui.config_screen import ConfigScreen
+from umakit.tui.main_screen import MainScreen, TemplateScreen
 from umakit.tui.run_screen import RunScreen
 
 
@@ -177,18 +176,15 @@ class UmaCalcApp(App):
             "device": "cpu",
             "output_dir": "./results",
             "job_name": None,
-
             # SP options
             "write_forces": True,
             "write_stress": True,
-
             # OPT options
             "fmax": 0.05,
             "max_steps": 500,
             "optimizer": "FIRE",
             "cell_opt": False,
             "fix_symmetry": False,
-
             # MD options
             "ensemble": "NVT",
             "temperature": 300.0,
@@ -199,7 +195,6 @@ class UmaCalcApp(App):
             "pre_relax": True,  # NEW: Pre-relaxation for MD
             "pre_relax_steps": 50,
             "pre_relax_fmax": 0.1,
-
             # Batch options
             "pattern": "*.cif",
         }
@@ -211,15 +206,9 @@ class UmaCalcApp(App):
         """Compose the main UI."""
         yield Header(show_clock=True)
         yield Container(
-            Static(
-                "UMA Calculator - Universal Material Application",
-                id="title"
-            ),
-            Static(
-                "Interactive Configuration Interface",
-                id="subtitle"
-            ),
-            id="main-container"
+            Static("UMA Calculator - Universal Material Application", id="title"),
+            Static("Interactive Configuration Interface", id="subtitle"),
+            id="main-container",
         )
         yield Footer()
 
@@ -249,7 +238,7 @@ class UmaCalcApp(App):
             "- ESC: Back\n"
             "- Q: Quit",
             title="Help",
-            timeout=10
+            timeout=10,
         )
 
     def update_config(self, key: str, value: Any) -> None:

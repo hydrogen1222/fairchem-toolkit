@@ -1,13 +1,10 @@
-from __future__ import annotations
-
 """
 Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
-"""
 
-"""Programmatic API for UMA Calculator.
+Programmatic API for UMA Calculator.
 
 Provides high-level functions for running calculations from Python scripts.
 This module is designed for external scripts that need to integrate UMA
@@ -29,6 +26,8 @@ Example:
     >>> energy = calculate_energy("structure.cif", "uma-s-1.pt", task="omat")
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -36,9 +35,9 @@ from ase import Atoms
 from ase.io import read
 
 from umakit.calculator import UMACalculator
-from umakit.runners.singlepoint import SinglePointRunner
-from umakit.runners.optimization import OptimizationRunner
 from umakit.runners.md import MDRunner
+from umakit.runners.optimization import OptimizationRunner
+from umakit.runners.singlepoint import SinglePointRunner
 
 if TYPE_CHECKING:
     from typing import Any
@@ -410,8 +409,13 @@ def calculate_adsorption_energy(
     if verbose:
         print("1. Calculating adsorbed system energy...")
     E_adsorbed = calculate_energy(
-        adsorbed_structure, model_path, task, device,
-        relax=relax, verbose=verbose, **kwargs
+        adsorbed_structure,
+        model_path,
+        task,
+        device,
+        relax=relax,
+        verbose=verbose,
+        **kwargs,
     )
 
     if verbose:
@@ -419,8 +423,7 @@ def calculate_adsorption_energy(
         print()
         print("2. Calculating gas molecule energy...")
     E_gas = calculate_energy(
-        gas_structure, model_path, task, device,
-        relax=relax, verbose=verbose, **kwargs
+        gas_structure, model_path, task, device, relax=relax, verbose=verbose, **kwargs
     )
 
     if verbose:
@@ -428,8 +431,13 @@ def calculate_adsorption_energy(
         print()
         print("3. Calculating clean surface energy...")
     E_surface = calculate_energy(
-        surface_structure, model_path, task, device,
-        relax=relax, verbose=verbose, **kwargs
+        surface_structure,
+        model_path,
+        task,
+        device,
+        relax=relax,
+        verbose=verbose,
+        **kwargs,
     )
 
     if verbose:
@@ -453,9 +461,9 @@ def calculate_adsorption_energy(
 
 
 __all__ = [
-    "run_single_point",
-    "run_optimization",
-    "run_md",
-    "calculate_energy",
     "calculate_adsorption_energy",
+    "calculate_energy",
+    "run_md",
+    "run_optimization",
+    "run_single_point",
 ]

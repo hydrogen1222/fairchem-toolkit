@@ -1,18 +1,19 @@
-from __future__ import annotations
-
 """
 Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
+
+Run screen for executing calculations with live output.
 """
 
-"""Run screen for executing calculations with live output."""
+from __future__ import annotations
 
 import threading
 import traceback
 
 from ase.io import read
+from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
 from textual.widgets import Button, Log, ProgressBar, Static
@@ -232,6 +233,3 @@ class RunScreen(Screen):
 
         elif button_id == "back-btn":
             self.app.pop_screen()
-
-
-from textual.app import ComposeResult

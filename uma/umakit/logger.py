@@ -1,17 +1,16 @@
-from __future__ import annotations
-
 """
 Copyright (c) Meta Platforms, Inc. and affiliates.
 
 This source code is licensed under the MIT license found in the
 LICENSE file in the root directory of this source tree.
-"""
 
-"""Logging utilities for UMA Calculator.
+Logging utilities for UMA Calculator.
 
 Provides structured logging for all calculations with support for
 file output and console output.
 """
+
+from __future__ import annotations
 
 import logging
 import sys
@@ -48,7 +47,7 @@ def setup_logger(
     # Create formatter
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # Add file handler if specified
