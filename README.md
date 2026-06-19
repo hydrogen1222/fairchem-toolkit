@@ -27,6 +27,18 @@
 `fairchem` is the [FAIR](https://ai.meta.com/research/) Chemistry's centralized repository of all its data, models,
 demos, and application efforts for materials science and quantum chemistry.
 
+> [!NOTE]
+> **Fork Notice & Enhancements**
+> This repository is a customized fork of Meta FAIR Chemistry's open-source [fairchem](https://github.com/facebookresearch/fairchem) project. 
+> 
+> Key enhancements added in this repository:
+> *   **UMA Kit TUI/CLI (`uma_calc`)**: A command-line and interactive Textual TUI wrapper for running UMA foundation model calculations (single-point, optimization/relaxation, and Langevin molecular dynamics) with a VASP-like interface. See the [uma/ docs](file:///D:/Agent/fairchem/uma/docs/README.md) for more details.
+> *   **Bug Fixes & Refinements**: 
+>     *   Fixed Python `SyntaxError`s caused by multiple/misplaced docstrings in application scripts (including `main.py`, `dense_eval.py`, and `run_validation.py`).
+>     *   Fixed Langevin MD temperature DOF calculation under atomic constraints in `md.py`.
+>     *   Fixed argument forwarding in the adsorption example script.
+
+
 > :warning: **FAIRChem version 2 is a breaking change from version 1 and is not compatible with our previous pretrained models and code.**
 > If you want to use an older model or code from version 1 you will need to install [version 1](https://pypi.org/project/fairchem-core/1.10.0/),
 > as detailed [here](#looking-for-fairchem-v1-models-and-code).
