@@ -1,90 +1,49 @@
-# UMA Calculator
+# UMAKit — Universal Material Application Calculator
 
-A VASP-like command-line interface for FAIRChem's Universal Material Application (UMA) models.
+A VASP-compatible interface for FAIRChem's UMA machine-learning interatomic potential models.
 
-## Overview
-
-UMA Calculator provides a familiar interface for running machine learning interatomic potential (MLIP) calculations using Meta's FAIRChem UMA models. It follows VASP-style conventions for input/output files while leveraging the power of FAIRChem's ASE calculator integration.
-
-## Features
-
-- **Calculation Types**: Single point, geometry optimization, molecular dynamics, batch processing
-- **Output Formats**: VASP-style (OUTCAR, OSZICAR, CONTCAR, XDATCAR), JSON, ASE trajectory
-- **Input Methods**: INCAR-style configuration files or command-line arguments
-- **Multiple Tasks**: Support for omat, omol, oc20, odac, omc tasks
-- **Flexible Device**: CPU or CUDA computation
-
-## Installation
-
-```bash
-# Ensure you have fairchem-core installed
-pip install fairchem-core
-
-# Add uma_calc to your PATH
-export PATH=$PATH:/path/to/uma_package
-```
+> **Documentation:**
+> - **[中文用户手册 (Chinese Manual)](README_CN.md)** — 完整的中文使用手册，含所有命令参考、INCAR 配置、故障排除
+> - **[English User Manual](README_EN.md)** — Complete reference manual with all commands, INCAR keys, troubleshooting
+> - [Examples](EXAMPLES.md) — Example calculation recipes
+> - [User Guide](USER_GUIDE.md) — Original usage instructions
 
 ## Quick Start
 
-### 1. Generate a Template
-
 ```bash
-# Generate template for single point calculation
-uma_calc template sp -o INCAR.uma
+# Install
+cd uma && uv pip install -e .
 
-# Or for geometry optimization
-uma_calc template opt -o INCAR.uma
-```
+# Interactive TUI mode
+uma_calc tui
 
-### 2. Edit INCAR.uma
-
-```
-CALC_TYPE = SP
-TASK = omat
-MODEL_PATH = /path/to/uma-s-1.pt
-DEVICE = cpu
-```
-
-### 3. Run Calculation
-
-```bash
-# With INCAR file
-uma_calc run
-
-# Or use command-line directly
+# CLI: single-point energy
 uma_calc sp structure.cif --model uma-s-1.pt --task omat
+
+# CLI: geometry optimization
+uma_calc opt POSCAR --model uma-s-1.pt --fmax 0.02
+
+# CLI: molecular dynamics
+uma_calc md POSCAR --model uma-s-1.pt --ensemble NVT --temp 300 --steps 10000
+
+# CLI: batch processing
+uma_calc batch structures/ --model uma-s-1.pt --pattern "*.cif"
+
+# Background job management
+uma_calc jobs       # list jobs
+uma_calc kill <id>  # kill a job
+uma_calc clean      # clean completed jobs
 ```
 
-## Commands
+## Features
 
-| Command | Description |
-|---------|-------------|
-| `uma_calc run` | Run from INCAR.uma configuration file |
-| `uma_calc sp` | Single point calculation |
-| `uma_calc opt` | Geometry optimization |
-| `uma_calc md` | Molecular dynamics |
-| `uma_calc batch` | Batch processing multiple structures |
-| `uma_calc template` | Generate template INCAR files |
-
-## Output Files
-
-| File | Description |
-|------|-------------|
-| `OUTCAR` | Main output with detailed results (VASP-style) |
-| `CONTCAR` | Final/optimized structure |
-| `OSZICAR` | Optimization progress log |
-| `XDATCAR` | MD trajectory |
-| `uma_results.json` | Machine-readable JSON output |
-| `trajectory.traj` | ASE trajectory file |
-
-## Documentation
-
-- **[中文文档 (Chinese)](README_CN.md)** - 完整的中文使用手册
-- **[English Documentation](README_EN.md)** - Complete English user manual
-- [User Guide](USER_GUIDE.md) - Original usage instructions
-- [Examples](EXAMPLES.md) - Example calculations
-- [Report V2](REPORT_V2.md) - Version 2.0 refactoring report
+- **CLI + TUI + Python API** — Three interfaces sharing one execution engine
+- **Calculation Types** — Single point, geometry optimization (FIRE/BFGS/LBFGS), molecular dynamics (NVT/NVE), batch processing
+- **VASP-compatible Output** — OUTCAR, CONTCAR, XDATCAR, OSZICAR formats
+- **Background Jobs** — Submit, detach, re-attach, and kill long-running calculations
+- **Cross-platform** — Windows, Linux, macOS | CPU & CUDA
+- **Resource Control** — CPU threads, GPU memory, inference mode selection
 
 ## License
 
-MIT License - See LICENSE file for details.
+MIT License — Copyright (c) Meta Platforms, Inc. and affiliates.

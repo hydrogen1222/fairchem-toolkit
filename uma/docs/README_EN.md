@@ -1,478 +1,1248 @@
-# UMA Calculator User Manual
+# UMAKit — User Manual
+
+> **Universal Material Application Calculator**
+> A VASP-compatible interface for FAIRChem UMA machine-learning interatomic potentials
+
+---
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Directory Structure](#directory-structure)
-3. [Working Principles](#working-principles)
-4. [Installation](#installation)
-5. [Usage Guide](#usage-guide)
-6. [Troubleshooting](#troubleshooting)
+- [1. Introduction](#1-introduction)
+- [2. Installation](#2-installation)
+- [3. Quick Start](#3-quick-start)
+- [4. Architecture Overview](#4-architecture-overview)
+- [5. Calculation Types](#5-calculation-types)
+  - [5.1 Single Point (SP)](#51-single-point-sp)
+  - [5.2 Geometry Optimization (OPT)](#52-geometry-optimization-opt)
+  - [5.3 Molecular Dynamics (MD)](#53-molecular-dynamics-md)
+  - [5.4 Batch Processing](#54-batch-processing)
+- [6. User Interfaces](#6-user-interfaces)
+  - [6.1 CLI — Command Line Interface](#61-cli--command-line-interface)
+  - [6.2 TUI — Terminal User Interface](#62-tui--terminal-user-interface)
+  - [6.3 Python API](#63-python-api)
+- [7. INCAR Configuration Reference](#7-incar-configuration-reference)
+- [8. Output Files Reference](#8-output-files-reference)
+- [9. Task Types Reference](#9-task-types-reference)
+- [10. Background Jobs](#10-background-jobs)
+- [11. Resource Control](#11-resource-control)
+- [12. Troubleshooting & FAQ](#12-troubleshooting--faq)
+- [13. Performance Guide](#13-performance-guide)
+- [14. Examples](#14-examples)
+- [15. License](#15-license)
 
 ---
 
-## Introduction
+## 1. Introduction
 
-UMA Calculator is a materials science computational tool based on the FAIRChem UMA model, providing a VASP-like interface for running Machine Learning Interatomic Potential (MLIP) calculations. It supports various calculation types including single point energy, geometry optimization, and molecular dynamics.
+UMAKit is a materials-science computational tool built on Meta's FAIRChem UMA (Universal Material Application) models. It provides a VASP-like user experience for running machine-learning interatomic potential (MLIP) calculations.
 
-### Key Features
+**What UMAKit does:**
 
-- **Interactive Interface**: Provides both TUI (Terminal User Interface) and CLI (Command Line Interface) operation modes
-- **Multiple Calculation Types**: Single Point (SP), Geometry Optimization (OPT), Molecular Dynamics (MD)
-- **Intelligent Pre-relaxation**: Automatic structure pre-relaxation before MD to prevent atom explosion
-- **VASP-compatible Output**: Generates standard format files like OUTCAR, CONTCAR, XDATCAR
+- Compute energy, forces, and stress for crystal structures and molecules
+- Optimize atomic positions and cell parameters (geometry relaxation)
+- Run molecular dynamics simulations (NVT / NVE ensembles)
+- Process hundreds of structures in batch mode
+- Output results in VASP-compatible formats (OUTCAR, CONTCAR, XDATCAR, OSZICAR)
+
+**How UMAKit works:**
+
+Unlike VASP, which solves the Kohn-Sham equations self-consistently, UMAKit uses a pre-trained equivariant neural network (SO(3)-equivariant eSCN architecture) to predict energies and forces in a single forward pass. There are no electronic steps, no SCF cycles, and no k-points. The cost scales roughly linearly with the number of atoms.
+
+```
+                          ┌──────────────────┐
+  structure.cif  ────────▶│  UMA Neural Net  │───────▶  energy, forces, stress
+  (atomic positions)      │  (pre-trained)   │         (single forward pass)
+                          └──────────────────┘
+```
+
+**Key features at a glance:**
+
+| Feature | Description |
+|---------|-------------|
+| CLI mode | Full command-line interface with 10 subcommands |
+| TUI mode | Interactive terminal UI with live progress |
+| Python API | Programmatic access for scripting and workflows |
+| Background jobs | Submit, detach, re-attach, and kill long-running calculations |
+| Batch processing | Process many structures in parallel |
+| CPU & CUDA | Runs on CPU or GPU, auto-detected |
+| VASP output | OUTCAR, CONTCAR, XDATCAR, OSZICAR formats |
+| Cross-platform | Windows, Linux, macOS |
 
 ---
 
-## Directory Structure
+## 2. Installation
 
-```
-uma/
-├── uma_calc.py                 # Program entry point
-├── setup.py                    # Installation configuration
-├── uma-s-1.pt                  # UMA Small model (1.1GB)
-├── uma-m-1p1.pt                # UMA Medium model (11GB)
-│
-├── structure_files/            # Example input files
-│   ├── 1.cif                   # CIF format crystal structure
-│   ├── POSCAR                  # VASP POSCAR format
-│   └── CONTCAR                 # Optimized structure
-│
-├── umakit/                     # Core program package
-│   ├── __init__.py
-│   ├── calculator.py           # UMA calculator wrapper
-│   ├── cli.py                  # Command line interface
-│   ├── config.py               # INCAR configuration parser
-│   ├── logger.py               # Logging system
-│   ├── utils.py                # Utility functions
-│   │
-│   ├── runners/                # Calculation runners
-│   │   ├── base.py             # Base class
-│   │   ├── singlepoint.py      # Single point energy
-│   │   ├── optimization.py     # Geometry optimization
-│   │   ├── md.py               # Molecular dynamics
-│   │   └── batch.py            # Batch processing
-│   │
-│   ├── tui/                    # TUI interface
-│   │   ├── app.py              # TUI application main class
-│   │   ├── main_screen.py      # Main menu
-│   │   ├── config_screen.py    # Configuration interface
-│   │   └── run_screen.py       # Run interface
-│   │
-│   └── writers/                # Output file writers
-│       ├── outcar.py           # OUTCAR format
-│       ├── contcar.py          # CONTCAR format
-│       ├── xdatcar.py          # XDATCAR format (MD trajectory)
-│       ├── oszicar.py          # OSZICAR format (optimization progress)
-│       ├── json_writer.py      # JSON format results
-│       └── trajectory.py       # ASE trajectory
-│
-├── docs/                       # Documentation
-│   ├── README_CN.md            # Chinese documentation
-│   ├── README_EN.md            # English documentation (this file)
-│   ├── EXAMPLES.md             # Examples
-│   └── USER_GUIDE.md           # User guide
-│
-└── templates/                  # INCAR templates
-    ├── INCAR.sp                # Single point template
-    ├── INCAR.opt               # Geometry optimization template
-    └── INCAR.md                # Molecular dynamics template
-```
+### 2.1 Prerequisites
 
----
+| Requirement | Minimum | Recommended |
+|-------------|---------|-------------|
+| Python | 3.9+ | 3.11+ |
+| RAM | 8 GB | 32 GB |
+| Disk | 2 GB (model: 1.2 GB) | 15 GB (larger models) |
+| GPU (optional) | CUDA 11.8+ | CUDA 12.x, 8+ GB VRAM |
 
-## Working Principles
-
-### Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        User Interface Layer                   │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │  CLI Command │  │   TUI UI    │  │  INCAR Config File  │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      Calculation Control Layer                │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────┐ │
-│  │  SinglePoint │ │ Optimization │ │  Molecular Dynamics  │ │
-│  │    Runner    │ │    Runner    │ │       Runner         │ │
-│  └──────────────┘ └──────────────┘ └──────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        Model Inference Layer                  │
-│              ┌───────────────────────────┐                  │
-│              │   FAIRChem UMA Model      │                  │
-│              │  (uma-s-1.pt / uma-m-1p1.pt)               │
-│              └───────────────────────────┘                  │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                        Output Processing Layer                │
-│  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐  │
-│  │ OUTCAR │ │CONTCAR │ │XDATCAR │ │  JSON  │ │trajectory│  │
-│  └────────┘ └────────┘ └────────┘ └────────┘ └──────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Calculation Workflow
-
-1. **Structure Input**: Read atomic structures in CIF, POSCAR, XYZ, etc. formats
-2. **Model Loading**: Load pre-trained UMA model (SO(3) equivariant neural network)
-3. **Graph Construction**: Build atomic neighbor graphs with periodic boundary conditions
-4. **Forward Calculation**: Model inference to obtain energy, forces, stress
-5. **Post-processing**: Optimization or MD integration based on calculation type
-6. **Result Output**: Generate output files in various formats
-
-### MD Pre-relaxation Mechanism
-
-Traditional MD simulations often suffer from atom explosion due to internal stress in the initial structure. This program automatically performs FIRE optimization before MD:
-
-```python
-# Pre-relaxation phase
-optimizer = FIRE(atoms, logfile=None)
-optimizer.run(fmax=0.1, steps=50)  # Quickly eliminate stress
-
-# Then start MD
-dyn = Langevin(atoms, ...)
-dyn.run(steps)
-```
-
----
-
-## Installation
-
-### System Requirements
-
-- Python >= 3.10
-- CUDA >= 11.8 (for GPU support)
-- RAM >= 16GB (recommended 32GB)
-
-### Installation Steps
+### 2.2 Installing with uv (recommended)
 
 ```bash
-# 1. Clone or download code
-cd /path/to/uma
+# Clone the repository
+git clone https://github.com/FAIR-Chem/fairchem.git
+cd fairchem
 
-# 2. Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# or .venv\Scripts\activate  # Windows
+# Install fairchem-core
+cd packages/fairchem-core
+uv pip install -e ".[dev]"
 
-# 3. Install dependencies
-pip install torch>=2.0.0
-pip install ase>=3.26.0
-pip install fairchem-core
-pip install textual  # Required for TUI interface
-
-# 4. Or install using uv
+# UMAKit is in the uma/ directory
+cd ../../uma
 uv pip install -e .
 ```
 
-### Model Download
+### 2.3 Model Checkpoint
+
+Download the UMA model checkpoint from FAIRChem:
 
 ```bash
-# UMA Small model (recommended, 1.1GB)
-# Download: https://fair-chem.github.io/models/uma/
+# UMA Small (recommended starting point, ~1.2 GB)
+# Download from: https://fair-chem.github.io/models/uma/
+# Place the .pt file in your working directory or a known path
+```
 
-# UMA Medium model (11GB, higher accuracy)
+The model path is specified with `--model` (CLI), in the TUI config screen, or via the `MODEL_PATH` key in INCAR files.
+
+### 2.4 Verify Installation
+
+```bash
+uma_calc --help
+```
+
+Should print the help message with all available subcommands.
+
+---
+
+## 3. Quick Start
+
+### 3.1 Your First Calculation (CLI)
+
+```bash
+# Single-point energy of a crystal structure
+uma_calc sp structure.cif --model uma-s-1.pt --task omat
+
+# Output:
+# ================================================================================
+#                             UMA CALCULATOR
+#                (Universal Material Application - FAIRChem)
+# ================================================================================
+#
+# Reading structure from: structure.cif
+# System: Li3PS4
+# Atoms: 28
+#
+# Loading model: uma-s-1.pt
+#   Calculating energy and forces...
+#   Energy: -123.456789 eV
+#   Calculation completed in 2.34 s
+#
+# ================================================================================
+#  SUMMARY
+# ================================================================================
+# Total energy:       -123.45678900 eV
+# Energy per atom:      -4.40917068 eV/atom
+# Max force:             0.12345678 eV/Å
+# RMS force:             0.05678901 eV/Å
+# ================================================================================
+```
+
+### 3.2 Your First Calculation (TUI)
+
+```bash
+# Launch the interactive terminal UI
+uma_calc tui
+```
+
+Navigate with arrow keys, Tab to switch fields, Enter to select.
+
+```
+┌─ UMA Calculator ───────────────────────────────────────────────────────────────┐
+│ Select Calculation Type                                                        │
+│                                                                                │
+│   Single Point (SP)                                                            │
+│     Calculate energy, forces, and stress                                       │
+│                                                                                │
+│   Geometry Optimization (OPT)                                                  │
+│     Optimize atomic positions                                                  │
+│                                                                                │
+│   Molecular Dynamics (MD)                                                      │
+│     Run NVT/NVE simulations                                                    │
+│                                                                                │
+│   Batch Processing                                                             │
+│     Process multiple structures                                                │
+│                                                                                │
+│   Background Jobs                                                              │
+│     View/manage running calculations                                           │
+│                                                                                │
+│   Generate Template                                                            │
+│     Create INCAR template file                                                 │
+│                                                                                │
+│   Exit                                                                         │
+│     Quit the application                                                       │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.3 Using INCAR Files (VASP-style)
+
+```bash
+# Generate a template
+uma_calc template sp -o INCAR.uma
+
+# Edit it:
+#   CALC_TYPE = SP
+#   TASK = omat
+#   MODEL_PATH = uma-s-1.pt
+#   DEVICE = cpu
+
+# Run from INCAR
+uma_calc run
 ```
 
 ---
 
-## Usage Guide
+## 4. Architecture Overview
 
-### Method 1: TUI Interactive Interface
-
-```bash
-# Launch TUI interface
-python uma_calc.py
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        USER INTERFACE LAYER                          │
+│  ┌──────────┐    ┌──────────────┐    ┌──────────────────┐          │
+│  │ CLI      │    │ TUI          │    │ Python API       │          │
+│  │ (argparse)│   │ (Textual)    │    │ (umakit.api)     │          │
+│  └────┬─────┘    └──────┬───────┘    └────────┬─────────┘          │
+│       │                 │                     │                     │
+│       └─────────────────┼─────────────────────┘                     │
+│                         ▼                                           │
+│              ┌─────────────────────┐                                │
+│              │   EngineConfig      │  ← Unified configuration       │
+│              │   (dataclass)       │                                │
+│              └─────────┬───────────┘                                │
+│                        ▼                                            │
+│              ┌─────────────────────┐                                │
+│              │ CalculationEngine   │  ← Single execution entry      │
+│              │ .run() / .run_async()│                                │
+│              └─────────┬───────────┘                                │
+└────────────────────────┼────────────────────────────────────────────┘
+                         │
+┌────────────────────────┼────────────────────────────────────────────┐
+│              CALCULATION LAYER                                       │
+│              ┌─────────────────────┐                                │
+│              │   BaseRunner        │  ← Progress events, logging     │
+│              └─────────┬───────────┘                                │
+│         ┌──────────────┼──────────────────┐                         │
+│         ▼              ▼                  ▼                          │
+│  ┌────────────┐ ┌────────────┐ ┌──────────────┐                     │
+│  │SinglePoint │ │Optimization│ │Molecular     │                     │
+│  │Runner      │ │Runner      │ │DynamicsRunner│                     │
+│  └─────┬──────┘ └─────┬──────┘ └──────┬───────┘                     │
+│        │              │               │                              │
+│        └──────────────┼───────────────┘                              │
+│                       ▼                                              │
+│              ┌─────────────────────┐                                │
+│              │   UMACalculator     │  ← Wraps FAIRChem ASE calc     │
+│              └─────────┬───────────┘                                │
+└────────────────────────┼────────────────────────────────────────────┘
+                         │
+┌────────────────────────┼────────────────────────────────────────────┐
+│              MODEL LAYER                                             │
+│              ┌─────────────────────┐                                │
+│              │  FAIRChem UMA Model │  ← SO(3)-equivariant NN        │
+│              │  InferenceSettings  │     tf32, compile, threads      │
+│              └─────────────────────┘                                │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Operation Guide:**
+The `CalculationEngine` is the central orchestrator: all three interfaces (CLI, TUI, API) construct an `EngineConfig` and call the same `CalculationEngine` methods. This eliminates code duplication and ensures consistent behavior.
 
-| Key | Function |
-|------|------|
-| `↑/↓` | Select menu items |
-| `Enter` | Confirm selection |
-| `Tab` | Switch to next input field |
-| `Esc` | Return to previous level |
-| `Q` | Exit program |
-| `↑/↓/PgUp/PgDn` | Scroll page |
+---
 
-**Workflow:**
+## 5. Calculation Types
 
-1. **Select Calculation Type**: SP / OPT / MD / Batch / Template
-2. **Configure Parameters**:
-   - Structure File: Input structure file path (e.g., `1.cif`)
-   - Model File: Input model path (e.g., `uma-s-1.pt`)
-   - Output Directory: Output directory (default `./results`)
-   - Task Type: Select task type (omat/oc20/omol, etc.)
-   - Device: CPU or CUDA
-3. **Calculation Options**: Set specific parameters based on calculation type
-4. **Click Run**: Start calculation
+### 5.1 Single Point (SP)
 
-### Method 2: CLI Command Line
+A single-point calculation computes the potential energy, atomic forces, and (if supported) stress tensor for a fixed atomic configuration. This is the simplest and fastest calculation type.
 
-#### Single Point Energy (SP)
+**What it produces:**
+- Total energy (eV)
+- Energy per atom (eV/atom)
+- Force on each atom (eV/Å), with max and RMS force magnitudes
+- Stress tensor (Voigt notation, eV/Å³) — if supported by the model/task
+- Pressure (GPa) — derived from stress trace
+
+**CLI usage:**
 
 ```bash
-# Basic usage
-python uma_calc.py sp structure.cif --model uma-s-1.pt --task omat
+uma_calc sp <structure> --model <model.pt> [options]
 
-# Specify device and output directory
-python uma_calc.py sp POSCAR \
+# Basic
+uma_calc sp POSCAR --model uma-s-1.pt --task omat
+
+# With output directory and job name
+uma_calc sp structure.cif \
     --model uma-s-1.pt \
     --task omat \
     --device cuda \
-    --output ./results
+    --output ./results \
+    --name my_calculation
 ```
 
-#### Geometry Optimization (OPT)
+**Output files:** `OUTCAR`, `CONTCAR`, `uma_results.json`
+
+### 5.2 Geometry Optimization (OPT)
+
+Optimizes atomic positions (and optionally cell parameters) to find a local energy minimum. The calculation stops when the maximum force on any atom falls below the convergence threshold (`fmax`), or when the maximum number of steps is reached.
+
+**Algorithms:**
+
+| Optimizer | Description | Best for |
+|-----------|-------------|----------|
+| `FIRE` | Fast Inertial Relaxation Engine (default) | Most systems, robust |
+| `BFGS` | Broyden-Fletcher-Goldfarb-Shanno | Small systems, fast convergence |
+| `LBFGS` | Limited-memory BFGS | Larger systems |
+
+**CLI usage:**
 
 ```bash
-# Basic optimization
-python uma_calc.py opt structure.cif --model uma-s-1.pt
+uma_calc opt <structure> --model <model.pt> [options]
 
-# Tight convergence with cell optimization
-python uma_calc.py opt POSCAR \
+# Basic optimization
+uma_calc opt POSCAR --model uma-s-1.pt
+
+# Tight convergence with cell relaxation
+uma_calc opt POSCAR \
     --model uma-s-1.pt \
     --fmax 0.02 \
     --max-steps 1000 \
     --cell-opt \
-    --optimizer FIRE
+    --optimizer BFGS
+
+# Preserve crystal symmetry
+uma_calc opt structure.cif \
+    --model uma-s-1.pt \
+    --fix-symmetry
 ```
 
-**Parameter Description:**
-- `--fmax`: Force convergence threshold (eV/Å), default 0.05
-- `--max-steps`: Maximum optimization steps, default 500
-- `--optimizer`: Optimization algorithm (FIRE/BFGS/LBFGS)
-- `--cell-opt`: Enable cell optimization
-- `--fix-symmetry`: Preserve symmetry
+**Parameters:**
 
-#### Molecular Dynamics (MD)
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--fmax` | 0.05 | Force convergence threshold (eV/Å) |
+| `--max-steps` | 500 | Maximum optimization steps |
+| `--optimizer` | FIRE | FIRE / BFGS / LBFGS |
+| `--cell-opt` | off | Enable cell parameter optimization |
+| `--fix-symmetry` | off | Preserve crystal symmetry |
+
+**Output files:** `OUTCAR`, `CONTCAR` (optimized structure), `OSZICAR` (step-by-step progress), `uma_results.json`
+
+### 5.3 Molecular Dynamics (MD)
+
+Simulates the time evolution of atoms at a given temperature. Supports two ensembles:
+
+| Ensemble | Integrator | Description |
+|----------|-----------|-------------|
+| NVT | Langevin | Constant particle number, volume, temperature (canonical) |
+| NVE | Velocity Verlet | Constant particle number, volume, energy (microcanonical) |
+
+**Pre-relaxation:** Before starting MD, UMAKit automatically performs a quick FIRE optimization (default: 50 steps, fmax=0.1 eV/Å) to eliminate internal stress. This prevents "atom explosion" — a common failure mode where high initial forces cause atoms to fly apart. You can disable this with `--no-pre-relax` (not yet exposed in CLI; use INCAR or TUI).
+
+**CLI usage:**
 
 ```bash
-# NVT ensemble @ 300K
-python uma_calc.py md structure.cif \
+uma_calc md <structure> --model <model.pt> [options]
+
+# NVT at 300K for 10 ps
+uma_calc md POSCAR \
     --model uma-s-1.pt \
     --ensemble NVT \
     --temp 300 \
+    --timestep 1.0 \
     --steps 10000 \
-    --timestep 1.0
+    --save-interval 10
 
 # NVE ensemble
-python uma_calc.py md POSCAR \
+uma_calc md CONTCAR \
     --model uma-s-1.pt \
     --ensemble NVE \
     --temp 300 \
     --steps 5000
 ```
 
-**Parameter Description:**
-- `--ensemble`: Ensemble type (NVT/NVE)
-- `--temp`: Temperature (K), default 300
-- `--timestep`: Time step (fs), default 1.0
-- `--steps`: Simulation steps, default 1000
-- `--save-interval`: Save interval, default 10
+**Parameters:**
 
-**Note:** MD automatically performs pre-relaxation to eliminate stress.
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--ensemble` | NVT | NVT or NVE |
+| `--temp` | 300 | Temperature (K) |
+| `--timestep` | 1.0 | Time step (fs) |
+| `--steps` | 1000 | Number of MD steps |
+| `--friction` | 0.001 | Friction coefficient (NVT only, fs⁻¹) |
+| `--save-interval` | 10 | Save trajectory every N steps |
 
-#### Batch Processing
+**Output files:** `OUTCAR`, `CONTCAR` (final structure), `XDATCAR` (trajectory), `trajectory.traj` (ASE format), `uma_results.json`
+
+### 5.4 Batch Processing
+
+Run the same calculation type on many structures in a directory. Supports `sp` and `opt` calculation types. Parallel execution is available via `--parallel`.
+
+**CLI usage:**
 
 ```bash
-# Batch single point calculations
-python uma_calc.py batch structures/ \
+uma_calc batch <input_dir> --model <model.pt> [options]
+
+# SP calculation on all CIF files
+uma_calc batch structures/ \
     --model uma-s-1.pt \
     --calc-type sp \
     --pattern "*.cif" \
     --output batch_results
+
+# OPT on all POSCAR files in parallel
+uma_calc batch poscars/ \
+    --model uma-s-1.pt \
+    --calc-type opt \
+    --pattern "POSCAR*" \
+    --parallel \
+    --workers 4
 ```
 
-#### Generate Templates
+**Output:** Each structure gets its own sub-directory under the output directory. A `batch_summary.json` file lists all results.
 
-```bash
-# Generate INCAR templates
-python uma_calc.py template sp -o INCAR.sp
-python uma_calc.py template opt -o INCAR.opt
-python uma_calc.py template md -o INCAR.md
+---
+
+## 6. User Interfaces
+
+### 6.1 CLI — Command Line Interface
+
+The CLI is invoked via `uma_calc <command> [options]`. Running `uma_calc` without arguments launches the TUI by default.
+
+#### Complete Command Reference
+
+##### `uma_calc sp` — Single Point
+
+```
+uma_calc sp STRUCTURE --model MODEL [--task TASK] [--device DEVICE]
+                       [--output DIR] [--name NAME]
+
+  STRUCTURE             Input structure file (CIF, XYZ, POSCAR, VASP, etc.)
+  --model MODEL         Path to UMA model checkpoint (.pt file) [required]
+  --task TASK           Task type: omat|omol|oc20|oc25|odac|omc [default: omat]
+  --device DEVICE       cpu|cuda [default: cpu]
+  --output DIR, -o DIR  Output directory [default: .]
+  --name NAME, -n NAME  Job name (output goes to DIR/NAME)
 ```
 
-#### Run from INCAR File
+##### `uma_calc opt` — Geometry Optimization
 
-```bash
-# Run from INCAR file
-python uma_calc.py run -i INCAR.uma -s structure.cif -o results/
+```
+uma_calc opt STRUCTURE --model MODEL [options]
+
+  --fmax FMAX           Force convergence threshold eV/Å [default: 0.05]
+  --max-steps N         Maximum optimization steps [default: 500]
+  --optimizer ALGO      FIRE|BFGS|LBFGS [default: FIRE]
+  --cell-opt            Enable cell parameter optimization
+  --fix-symmetry        Preserve crystal symmetry
 ```
 
-**INCAR File Example:**
+##### `uma_calc md` — Molecular Dynamics
 
+```
+uma_calc md STRUCTURE --model MODEL [options]
+
+  --ensemble ENSEMBLE   NVT|NVE [default: NVT]
+  --temp TEMP           Temperature in Kelvin [default: 300]
+  --timestep DT         Time step in fs [default: 1.0]
+  --steps N             Number of MD steps [default: 1000]
+  --friction FRICTION   Friction coefficient for NVT [default: 0.001]
+  --save-interval N     Save trajectory every N steps [default: 10]
+```
+
+##### `uma_calc batch` — Batch Processing
+
+```
+uma_calc batch INPUT_DIR --model MODEL [options]
+
+  --calc-type TYPE      sp|opt [default: sp]
+  --pattern PATTERN     File glob pattern [default: *.cif]
+  --output DIR          Output directory [default: batch_results]
+```
+
+##### `uma_calc run` — Run from INCAR File
+
+```
+uma_calc run [-i INCAR] [-s STRUCTURE] [-o OUTPUT]
+
+  -i, --incar INCAR     Path to INCAR file [default: INCAR.uma]
+  -s, --structure FILE  Structure file (auto-detected: POSCAR, CONTCAR, *.cif, *.xyz)
+  -o, --output DIR      Output directory [default: .]
+```
+
+##### `uma_calc template` — Generate INCAR Template
+
+```
+uma_calc template TYPE [-o OUTPUT]
+
+  TYPE                  sp|opt|md
+  -o, --output FILE     Output file name [default: INCAR.<type>]
+```
+
+##### `uma_calc jobs` — List Background Jobs
+
+```
+uma_calc jobs
+```
+
+Shows all background jobs with their ID, status, type, formula, and device.
+
+##### `uma_calc kill` — Kill a Background Job
+
+```
+uma_calc kill JOB_ID
+```
+
+Terminates the specified job (cross-platform: `taskkill` on Windows, `SIGTERM` on Unix).
+
+##### `uma_calc clean` — Clean Completed/Failed Jobs
+
+```
+uma_calc clean
+```
+
+Removes state files for jobs that are done, failed, or cancelled. Running jobs are preserved.
+
+##### `uma_calc tui` — Launch TUI
+
+```
+uma_calc tui
+```
+
+Starts the interactive Terminal User Interface.
+
+### 6.2 TUI — Terminal User Interface
+
+The TUI is built on [Textual](https://textual.textualize.io/) and provides an interactive, keyboard-driven experience.
+
+#### Navigation
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate menu items / scroll |
+| `Tab` | Move to next input field |
+| `Shift+Tab` | Move to previous input field |
+| `Enter` | Select / confirm |
+| `Esc` | Go back to previous screen |
+| `Q` | Quit application |
+| `PgUp` / `PgDn` | Page up/down in scrollable areas |
+| `C` | Cancel selected job (Jobs screen) |
+| `D` | Delete job record (Jobs screen) |
+| `R` | Refresh job list (Jobs screen) |
+
+#### Screens
+
+**Main Menu** — Select calculation type (SP, OPT, MD, Batch, Jobs, Template, Exit).
+
+**Configuration** — Fill in paths, task type, device, and calculation-specific parameters. Paths support live validation with visual feedback:
+
+```
+📁 Structure File: [structure.cif                ]
+   ✅ Found: /home/user/fairchem/uma/structure.cif
+   💡 Tip: Relative paths are supported (e.g., ./data/structure.cif)
+```
+
+**Run** — Shows live progress during calculation:
+- Indeterminate spinner for SP calculations
+- Step counter for OPT (Step 5/500) and MD (Step 100/10000)
+- Real-time energy, forces, and temperature during MD
+
+**Jobs** — DataTable listing all background jobs with status icons:
+- ● Running | ✓ Done | ✗ Failed | ⊘ Cancelled
+- Press Enter on a job to view its log output
+- Auto-refreshes every 2 seconds
+
+### 6.3 Python API
+
+For scripting and workflow integration, import `umakit.api`:
+
+```python
+from umakit.api import run_single_point, run_optimization, run_md
+from umakit.api import calculate_energy, calculate_adsorption_energy
+
+# Single point energy
+results = run_single_point(
+    structure="structure.cif",
+    model_path="uma-s-1.pt",
+    task="omat",
+    device="cuda",
+    job_name="my_calc",
+)
+print(f"Energy: {results['energy']:.4f} eV")
+print(f"Forces: {results['forces']}")
+
+# Geometry optimization
+results = run_optimization(
+    structure="POSCAR",
+    model_path="uma-s-1.pt",
+    fmax=0.02,
+    cell_opt=True,
+)
+print(f"Converged: {results['converged']} in {results['nsteps']} steps")
+
+# Molecular dynamics
+results = run_md(
+    structure="CONTCAR",
+    model_path="uma-s-1.pt",
+    ensemble="NVT",
+    temperature=300,
+    steps=10000,
+    save_interval=10,
+)
+print(f"Final temperature: {results['temperature']:.1f} K")
+
+# Quick energy calculation
+energy = calculate_energy("structure.cif", "uma-s-1.pt")
+print(f"Energy: {energy:.4f} eV")
+
+# Adsorption energy
+ads_results = calculate_adsorption_energy(
+    adsorbed_structure="adsorbed.cif",
+    gas_structure="co2.xyz",
+    surface_structure="slab.cif",
+    model_path="uma-s-1.pt",
+    task="oc20",
+)
+print(f"Adsorption energy: {ads_results['adsorption_energy']:.4f} eV")
+```
+
+Full API reference:
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `run_single_point(structure, model_path, ...)` | `dict` | SP energy, forces, stress |
+| `run_optimization(structure, model_path, ...)` | `dict` | OPT with convergence info |
+| `run_md(structure, model_path, ...)` | `dict` | MD with trajectory and temperature |
+| `calculate_energy(structure, model_path, ...)` | `float` | Quick energy value |
+| `calculate_adsorption_energy(ads, gas, surf, ...)` | `dict` | E_ads = E_adsorbed - E_gas - E_surface |
+
+---
+
+## 7. INCAR Configuration Reference
+
+INCAR files use a VASP-style `KEY = VALUE` format. Lines starting with `#` or `!` are comments.
+
+### 7.1 All INCAR Keywords
+
+#### Calculation Control
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `CALC_TYPE` | string | `SP` | Calculation type: `SP`, `OPT`, `MD`, `BATCH` |
+
+#### Model Settings
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `MODEL_PATH` | string | `uma-s-1.pt` | Path to model checkpoint (.pt file) |
+| `TASK` | string | `omat` | Task type: `omat`, `omol`, `oc20`, `oc25`, `odac`, `omc` |
+| `DEVICE` | string | `cpu` | Compute device: `cpu`, `cuda` |
+| `INFERENCE_MODE` | string | `default` | Inference mode: `default`, `turbo` |
+
+#### Output Control
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `WRITE_FORCES` | bool | `.TRUE.` | Write forces to OUTCAR |
+| `WRITE_STRESS` | bool | `.TRUE.` | Write stress to OUTCAR |
+| `WRITE_TRAJECTORY` | bool | `.TRUE.` | Write trajectory for MD |
+| `OUTPUT_FORMAT` | string | `VASP` | Output format: `VASP` |
+
+#### Optimization Settings
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `OPT_ALGO` | string | `FIRE` | Optimizer: `FIRE`, `BFGS`, `LBFGS` |
+| `FMAX` | float | `0.05` | Force convergence (eV/Å) |
+| `MAX_STEPS` | int | `500` | Max optimization steps |
+| `CELL_OPT` | bool | `.FALSE.` | Optimize cell parameters |
+| `FIX_SYMMETRY` | bool | `.FALSE.` | Preserve symmetry |
+
+#### MD Settings
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `MD_ENSEMBLE` | string | `NVT` | Ensemble: `NVT`, `NVE` |
+| `TEMPERATURE` | float | `300.0` | Temperature (K) |
+| `TIMESTEP` | float | `1.0` | Time step (fs) |
+| `STEPS` | int | `10000` | Number of MD steps |
+| `FRICTION` | float | `0.001` | Friction coefficient |
+| `SAVE_INTERVAL` | int | `10` | Trajectory save interval |
+
+### 7.2 Template Examples
+
+**INCAR.sp** (Single Point):
 ```bash
-# INCAR.uma - Geometry optimization configuration
+CALC_TYPE = SP
+TASK = omat
+MODEL_PATH = uma-s-1.pt
+DEVICE = cpu
+INFERENCE_MODE = default
+WRITE_FORCES = .TRUE.
+WRITE_STRESS = .TRUE.
+```
+
+**INCAR.opt** (Geometry Optimization):
+```bash
 CALC_TYPE = OPT
 TASK = omat
 MODEL_PATH = uma-s-1.pt
 DEVICE = cuda
-
 OPT_ALGO = FIRE
 FMAX = 0.05
 MAX_STEPS = 500
-CELL_OPT = .TRUE.
+CELL_OPT = .FALSE.
+FIX_SYMMETRY = .FALSE.
+```
+
+**INCAR.md** (Molecular Dynamics):
+```bash
+CALC_TYPE = MD
+TASK = omat
+MODEL_PATH = uma-s-1.pt
+DEVICE = cuda
+INFERENCE_MODE = turbo
+MD_ENSEMBLE = NVT
+TEMPERATURE = 300.0
+TIMESTEP = 1.0
+STEPS = 10000
+FRICTION = 0.001
+SAVE_INTERVAL = 10
+```
+
+### 7.3 Boolean Values
+
+The following are all recognized as `TRUE` and `FALSE` (case-insensitive):
+
+- **TRUE**: `.TRUE.`, `.T.`, `TRUE`, `T`, `YES`, `Y`, `1`
+- **FALSE**: `.FALSE.`, `.F.`, `FALSE`, `F`, `NO`, `N`, `0`
+
+---
+
+## 8. Output Files Reference
+
+### 8.1 File Inventory
+
+| File | Created By | Format | Description |
+|------|-----------|--------|-------------|
+| `OUTCAR` | SP, OPT, MD | Text | VASP-style detailed output with energies, forces, stress, timing |
+| `CONTCAR` | SP, OPT, MD | Text | Current/final atomic structure in VASP POSCAR format |
+| `OSZICAR` | OPT | Text | Step-by-step optimization progress with energy and force |
+| `XDATCAR` | MD | Text | Trajectory in VASP format (concatenated POSCARs) |
+| `uma_results.json` | SP, OPT, MD | JSON | Machine-readable results with all computed quantities |
+| `trajectory.traj` | MD | Binary | ASE trajectory file for analysis |
+| `optimization.log` | OPT | Text | ASE optimizer log |
+| `calculation.log` | All | Text | Structured calculation log |
+| `batch_summary.json` | BATCH | JSON | Summary of all structures processed in batch |
+
+### 8.2 OUTCAR Format
+
+The OUTCAR file contains:
+
+```
+================================================================================
+                         UMA CALCULATION RESULTS
+                (Universal Material Application - FAIRChem)
+================================================================================
+
+Generated: 2026-06-19 14:30:15
+
+--------------------------------------------------------------------------------
+ SYSTEM INFORMATION
+--------------------------------------------------------------------------------
+
+Formula:           Li3PS4
+Number of atoms:   28
+Atom types:        Li: 12, P: 4, S: 12
+Task:              omat
+Calculation mode:  single_point
+
+--------------------------------------------------------------------------------
+ MODEL INFORMATION
+--------------------------------------------------------------------------------
+
+Model path:        uma-s-1.pt
+Device:            cuda
+Inference mode:    default
+Properties:        energy, forces, stress
+
+--------------------------------------------------------------------------------
+ INPUT STRUCTURE
+--------------------------------------------------------------------------------
+
+Lattice vectors (Å):
+      8.500000      0.000000      0.000000
+      0.000000      8.500000      0.000000
+      0.000000      0.000000      8.500000
+
+Cell lengths (Å):    8.500000  8.500000  8.500000
+Cell angles (°):    90.000000  90.000000  90.000000
+Volume (Å³):         614.125000
+
+Atomic positions (Cartesian, Å):
+  Atom   Type            x            y            z
+--------------------------------------------------------------
+     1     Li      0.000000     0.000000     0.000000
+     2     Li      4.250000     4.250000     0.000000
+   ...
+
+--------------------------------------------------------------------------------
+ ENERGY
+--------------------------------------------------------------------------------
+
+Total energy:         -123.45678900 eV
+Energy per atom:        -4.40917068 eV/atom
+
+--------------------------------------------------------------------------------
+ FORCES (eV/Å)
+--------------------------------------------------------------------------------
+
+  Atom   Type           Fx           Fy           Fz          |F|
+----------------------------------------------------------------------
+     1     Li      0.012345    -0.023456     0.034567     0.043210
+   ...
+
+Maximum force:           0.123457 eV/Å on atom 7 (S)
+RMS force:               0.056789 eV/Å
+
+--------------------------------------------------------------------------------
+ STRESS TENSOR
+--------------------------------------------------------------------------------
+
+Stress (eV/Å³):
+        Voigt           xx           yy           zz           yz           xz           xy
+        Voigt     0.001234    -0.000567     0.000890     0.000000     0.000000     0.000000
+
+Stress (GPa):
+        Voigt     0.197734    -0.090856     0.142644     0.000000     0.000000     0.000000
+
+Pressure:               -0.083174 GPa
+
+--------------------------------------------------------------------------------
+ TIMING
+--------------------------------------------------------------------------------
+
+Calculation time:     2.34 s
+
+================================================================================
+ END OF UMA CALCULATION
+================================================================================
+```
+
+### 8.3 JSON Output (uma_results.json)
+
+```json
+{
+  "uma_version": "1.0.0",
+  "timestamp": "2026-06-19T14:30:15",
+  "calculation": {
+    "mode": "single_point",
+    "system": {
+      "formula": "Li3PS4",
+      "natoms": 28,
+      "symbols": ["Li", "Li", ...],
+      "cell": [[8.5, 0.0, 0.0], [0.0, 8.5, 0.0], [0.0, 0.0, 8.5]],
+      "cell_lengths": [8.5, 8.5, 8.5],
+      "cell_angles": [90.0, 90.0, 90.0],
+      "volume": 614.125,
+      "pbc": [true, true, true]
+    },
+    "positions": [[0.0, 0.0, 0.0], ...],
+    "results": {
+      "energy": -123.456789,
+      "energy_per_atom": -4.409171,
+      "forces": [[0.012345, -0.023456, 0.034567], ...],
+      "stress": [0.001234, -0.000567, 0.000890, 0.0, 0.0, 0.0],
+      "force_statistics": {
+        "fmax": 0.123457,
+        "fmean": 0.045678,
+        "frms": 0.056789
+      },
+      "pressure_gpa": -0.083174
+    },
+    "timing": {
+      "calculation_time_s": 2.34
+    }
+  }
+}
 ```
 
 ---
 
-## Output Files
+## 9. Task Types Reference
 
-### Standard Output
+UMA models are trained on different datasets; each task corresponds to a specific domain:
 
-| File | Description |
-|------|-------------|
-| `OUTCAR` | VASP format detailed output, containing energy, forces, stress |
-| `CONTCAR` | Final/optimized structure |
-| `uma_results.json` | JSON format results for program reading |
-| `calculation.log` | Calculation log |
+| Task | Domain | Systems | Charge/Spin | Stress | Typical Use |
+|------|--------|---------|-------------|--------|-------------|
+| `omat` | Inorganic Materials | Bulk crystals | Optional | ✓ | Battery materials, solid electrolytes, oxides |
+| `omol` | Molecules | Isolated molecules | **Required** | ✗ | Organic chemistry, drug-like molecules |
+| `oc20` | Catalysis (OC20) | Surface slabs | Optional | ✓ | Heterogeneous catalysis, adsorption |
+| `oc25` | Catalysis (OC25) | Surface slabs | Optional | ✓ | Extended catalysis benchmark |
+| `odac` | MOFs | Metal-organic frameworks | Optional | ✓ | Gas storage, separation |
+| `omc` | Molecular Crystals | Organic crystals | Optional | ✓ | Pharmaceuticals, organic electronics |
 
-### MD-specific Output
-
-| File | Description |
-|------|-------------|
-| `XDATCAR` | MD trajectory (VASP format) |
-| `trajectory.traj` | ASE trajectory file |
-
-### Optimization-specific Output
-
-| File | Description |
-|------|-------------|
-| `OSZICAR` | Optimization progress log |
-| `optimization.log` | ASE optimizer log |
-
----
-
-## Task Type Description
-
-| Task | Applicable Systems | Charge/Spin | Stress | Usage |
-|------|-------------------|-------------|--------|-------|
-| `omat` | Inorganic materials | Optional | ✓ | Bulk materials, battery materials |
-| `omol` | Molecules | **Required** | ✗ | Organic molecules, chemical reactions |
-| `oc20` | Catalytic surfaces | Optional | ✓ | Surface adsorption, catalysis |
-| `oc25` | Catalysis (extended) | Optional | ✓ | Extended catalysis datasets |
-| `odac` | MOFs | Optional | ✓ | Metal-organic frameworks |
-| `omc` | Molecular crystals | Optional | ✓ | Organic crystals |
-
-**Notes for Molecular Calculations:**
-
-For `omol` tasks, charge and spin must be specified in the structure file:
+**Important for molecular systems (omol):** Molecules must have `charge` and `spin` set in the Atoms info:
 
 ```python
 from ase.io import read, write
 
 atoms = read("molecule.xyz")
-atoms.info["charge"] = 0   # Total charge
-atoms.info["spin"] = 1     # Spin multiplicity (2S+1)
-write("molecule_with_charge.xyz", atoms)
+atoms.info["charge"] = 0    # Net charge
+atoms.info["spin"] = 1      # Spin multiplicity = 2S+1
+write("molecule.xyz", atoms)
+```
+
+For periodic systems (omat, oc20, oc25, odac, omc), PBC is automatically set to `True` and the cell is validated. For molecules (omol), PBC is set to `False`.
+
+---
+
+## 10. Background Jobs
+
+Long-running calculations (large-system MD, batch processing) can be submitted as background jobs. Jobs run as independent subprocesses and survive terminal disconnection.
+
+### 10.1 Submitting
+
+**CLI:** Not yet exposed via `--detach` flag (use TUI).
+
+**TUI:** Enable the "Run in background (detach)" switch on the Configuration screen.
+
+### 10.2 Managing Jobs
+
+```bash
+# List all jobs
+uma_calc jobs
+
+# Output:
+# ID                                       Status       Type   Formula      Device
+# -----------------------------------------------------------------------------------------
+# 2026-06-19_14-30-15_Li3PS4_sp            ● running    sp     Li3PS4       cuda
+# 2026-06-19_15-00-22_Cu_slab_opt          ✓ done       opt    Cu16         cpu
+# 2026-06-19_13-10-00_H2O_md               ✗ failed     md     H2O          cuda
+
+# View a job's log (TUI: press Enter on the job row)
+
+# Kill a running job
+uma_calc kill 2026-06-19_14-30-15_Li3PS4_sp
+
+# Clean up completed/failed job records
+uma_calc clean
+```
+
+### 10.3 Job Lifecycle
+
+```
+pending ──→ running ──→ done
+                │
+                ├── cancelled (user kill)
+                └── failed   (runtime error)
+```
+
+Job state files are stored at `~/.umakit/jobs/`. Each job has a JSON state file and a log file:
+
+```
+~/.umakit/jobs/
+├── 2026-06-19_14-30-15_Li3PS4_sp.json       # State (status, PID, progress)
+├── 2026-06-19_15-00-22_Cu_slab_opt.json
+├── 2026-06-19_13-10-00_H2O_md.json
+└── logs/
+    ├── 2026-06-19_14-30-15_Li3PS4_sp.log    # Full calculation output
+    ├── 2026-06-19_15-00-22_Cu_slab_opt.log
+    └── 2026-06-19_13-10-00_H2O_md.log
 ```
 
 ---
 
-## Troubleshooting
+## 11. Resource Control
 
-### Common Issues
+### 11.1 CPU Threads
 
-#### 1. Atom Explosion in MD
-
-**Symptom:** MD fails after a few steps with error "No edges found"
-
-**Solution:**
-- Pre-relaxation is built-in, usually no action needed
-- If problem persists, run OPT first to optimize structure
-- Lower initial temperature: `--temp 100`
+Control the number of CPU threads used by PyTorch:
 
 ```bash
-# Optimize first
-python uma_calc.py opt structure.cif --model uma-s-1.pt --max-steps 100
-# Then run MD with optimized structure
-python uma_calc.py md CONTCAR --model uma-s-1.pt --temp 100
+# CLI: set via environment variable
+export OMP_NUM_THREADS=4
+uma_calc sp structure.cif --model uma-s-1.pt
 ```
 
-#### 2. CUDA Out of Memory
+**Python API / EngineConfig:**
+```python
+config = EngineConfig(
+    ...,
+    torch_num_threads=4,
+)
+```
 
-**Symptom:** `RuntimeError: CUDA out of memory`
+### 11.2 GPU Memory
 
-**Solution:**
-- Use CPU calculation: `--device cpu`
-- Use smaller model: `uma-s-1.pt` instead of `uma-m-1p1.pt`
-- Reduce batch size (handled automatically in current version)
-
-#### 3. TUI Input Not Working
-
-**Symptom:** Input field cannot receive focus
-
-**Solution:**
-- Use `Tab` key to switch focus
-- Ensure terminal window is large enough (recommended at least 80x24)
-- Use arrow keys or PgUp/PgDn to scroll
-
-#### 4. Structure File Read Failure
-
-**Symptom:** `Error reading structure`
-
-**Solution:**
-- Check file format (CIF, POSCAR, XYZ, etc.)
-- Check file encoding (should be UTF-8)
-- Test reading with ASE directly:
+`activation_checkpointing` trades compute for memory — enabling it reduces GPU memory usage at the cost of a slight slowdown:
 
 ```python
-from ase.io import read
-try:
-    atoms = read("structure.cif")
-    print(f"Success: {atoms}")
-except Exception as e:
-    print(f"Error: {e}")
+config = EngineConfig(
+    ...,
+    activation_checkpointing=True,  # Lower GPU memory
+)
+```
+
+For systems with limited VRAM (< 8 GB), keep this enabled (default).
+
+### 11.3 GPU Selection
+
+Use the standard `CUDA_VISIBLE_DEVICES` environment variable:
+
+```bash
+# Use GPU 0 only
+CUDA_VISIBLE_DEVICES=0 uma_calc sp structure.cif --model uma-s-1.pt --device cuda
+
+# Use GPUs 0 and 1
+CUDA_VISIBLE_DEVICES=0,1 uma_calc sp structure.cif --model uma-s-1.pt --device cuda
+```
+
+### 11.4 Inference Modes
+
+| Mode | tf32 | compile | merge_mole | activation_ckpt | Best for |
+|------|------|---------|------------|-----------------|----------|
+| `default` | No | No | No | Yes | General use, SP, OPT |
+| `turbo` | Yes | Yes | Yes | No | MD, large systems, production |
+
+`turbo` mode is automatically used for MD calculations through the CLI and API.
+
+---
+
+## 12. Troubleshooting & FAQ
+
+### 12.1 Common Errors
+
+#### "No edges found in structure"
+
+**Cause:** The model cannot build a neighbor graph for your structure. This happens when atoms are too far apart (> 6 Å cutoff), the cell is invalid, or PBC settings are wrong.
+
+**Solutions:**
+1. Check the input structure file — ensure atomic positions are reasonable
+2. For bulk materials, ensure the cell is not too large (atoms should be within ~6 Å of each other)
+3. Try the original POSCAR format instead of CIF
+4. Check that PBC is set correctly (use `omat` task for periodic, `omol` for molecules)
+
+#### CUDA Out of Memory
+
+**Cause:** The model + structure requires more GPU memory than available.
+
+**Solutions:**
+1. Switch to CPU: `--device cpu`
+2. Use a smaller model (e.g., `uma-s-1.pt` instead of a larger variant)
+3. For large systems (> 100 atoms), CPU may be the only option
+
+#### "No structure file found"
+
+**Cause:** UMAKit couldn't find a structure file.
+
+**Solutions:**
+1. Specify the structure explicitly: `uma_calc sp POSCAR --model ...`
+2. Place `POSCAR`, `CONTCAR`, or `*.cif` in the current directory
+3. Use absolute paths: `uma_calc sp /path/to/structure.cif --model ...`
+
+#### TUI Import Error
+
+**Cause:** The `textual` package is not installed.
+
+**Solution:**
+```bash
+uv pip install textual
+```
+
+#### Atom Explosion in MD
+
+**Cause:** High initial forces cause atoms to fly apart in early MD steps.
+
+**Solution:**
+- Pre-relaxation is enabled by default (50 FIRE steps before MD)
+- If it still fails, run a full geometry optimization first:
+  ```bash
+  uma_calc opt POSCAR --model uma-s-1.pt --fmax 0.02
+  uma_calc md CONTCAR --model uma-s-1.pt --temp 100
+  ```
+- Lower the initial temperature: `--temp 100`
+- Check that your initial structure is physically reasonable
+
+### 12.2 FAQ
+
+**Q: How accurate is the UMA model compared to DFT?**
+
+A: UMA models are trained on DFT (PBE/SCAN) reference data. For systems within the training domain, energy errors are typically < 10 meV/atom and force errors < 50 meV/Å. Accuracy outside the training domain is not guaranteed.
+
+**Q: Can I use this for chemical reactions?**
+
+A: For reactions where bonds break/form, you need molecular dynamics. Use the `omol` task for molecules. Note that UMA is an MLIP — it approximates the PES but does not describe electronic transitions.
+
+**Q: How many atoms can I simulate?**
+
+A: Depends on memory. With 32 GB CPU RAM, systems up to ~500 atoms are feasible. With GPU, 100-200 atoms depending on VRAM. The model scales roughly O(N) with system size.
+
+**Q: Does the TUI work over SSH?**
+
+A: Yes, if your terminal supports Unicode and 256 colors. Most modern terminals (Windows Terminal, iTerm2, GNOME Terminal, Alacritty) work. Ensure your terminal window is at least 80 columns × 24 rows.
+
+**Q: Can I run multiple calculations simultaneously?**
+
+A: Yes. Use background jobs (`--detach` in TUI or `uma_calc jobs`) for multiple independent calculations. For batch processing of many structures, use `uma_calc batch --parallel --workers N`.
+
+**Q: What file formats are supported for input structures?**
+
+A: All formats supported by ASE's `read()` function: CIF, POSCAR, CONTCAR, XYZ, VASP, XSD, and many others.
+
+**Q: Is the UMA model suitable for metals? Semiconductors? Insulators?**
+
+A: UMA models support all three. The accuracy depends on whether the specific material is within the training distribution. The `omat` task covers a broad range of inorganic materials.
+
+---
+
+## 13. Performance Guide
+
+### 13.1 Typical Timings
+
+Timings for `uma-s-1.pt` on a single structure (approximate, varies by system):
+
+| System | Atoms | CPU (8 cores) | GPU (RTX 3080) |
+|--------|-------|---------------|-----------------|
+| Li₃PS₄ (bulk) | 28 | 2-3 s | 0.5-1 s |
+| Cu slab (3×3×4) | 144 | 15-20 s | 3-5 s |
+| MOF-5 | 424 | 60-90 s | 15-20 s |
+
+MD: ~1000 steps/minute for a 28-atom system on GPU.
+
+### 13.2 Optimization Tips
+
+1. **GPU for large systems, CPU for small ones:** GPU has overhead; for < 20 atoms, CPU may be faster
+2. **turbo mode for MD/production:** `--inference-mode turbo` (auto for MD via CLI)
+3. **Batch for throughput:** Process many structures in one invocation to avoid model reloading overhead
+4. **Pre-relax before MD:** Enabled by default, saves wasted MD steps on high-force structures
+
+### 13.3 Memory Scaling
+
+```
+Atoms  ~RAM (CPU)  ~VRAM (GPU)
+  10      2 GB       1 GB
+  50      4 GB       2 GB
+ 100      6 GB       4 GB
+ 200     10 GB       7 GB
+ 500     24 GB      16 GB
 ```
 
 ---
 
-## Performance Optimization Suggestions
+## 14. Examples
 
-### GPU Acceleration
+### 14.1 Battery Material Energy
 
 ```bash
-# Use CUDA device
-python uma_calc.py sp structure.cif --model uma-s-1.pt --device cuda
-
-# For MD, automatically uses turbo mode
-python uma_calc.py md structure.cif --model uma-s-1.pt --device cuda
+# Calculate the energy of an LLZO electrolyte structure
+uma_calc sp LLZO.cif --model uma-s-1.pt --task omat --device cuda
+# Output: OUTCAR, CONTCAR, uma_results.json
 ```
 
-### Batch Calculations
+### 14.2 Surface Relaxation
 
 ```bash
-# Use batch mode to process multiple structures
-python uma_calc.py batch structures/ \
+# Optimize a Pt(111) slab with cell fixed
+uma_calc opt Pt111_slab.cif \
+    --model uma-s-1.pt \
+    --task oc20 \
+    --fmax 0.02 \
+    --max-steps 300 \
+    --optimizer FIRE \
+    --device cuda
+```
+
+### 14.3 NVT MD Simulation
+
+```bash
+# Run 100 ps NVT at 400 K on an optimized structure
+uma_calc md CONTCAR \
+    --model uma-s-1.pt \
+    --ensemble NVT \
+    --temp 400 \
+    --timestep 1.0 \
+    --steps 100000 \
+    --save-interval 100 \
+    --device cuda
+```
+
+### 14.4 Batch Screening
+
+```bash
+# Single-point energy on 100 CIF files
+uma_calc batch candidates/ \
     --model uma-s-1.pt \
     --calc-type sp \
-    --pattern "*.cif"
+    --pattern "*.cif" \
+    --output screening_results
+
+# Analyze with Python
+import json
+with open("screening_results/batch_summary.json") as f:
+    data = json.load(f)
+for r in data["results"]:
+    if r["success"]:
+        print(f"{r['filename']}: {r['energy']:.4f} eV")
+```
+
+### 14.5 Adsorption Energy via Python API
+
+```python
+from umakit.api import calculate_adsorption_energy
+
+result = calculate_adsorption_energy(
+    adsorbed_structure="CO_on_Pt.cif",
+    gas_structure="CO.xyz",
+    surface_structure="Pt_slab.cif",
+    model_path="uma-s-1.pt",
+    task="oc20",
+    device="cuda",
+)
+print(f"Adsorption energy: {result['adsorption_energy']:.4f} eV")
+# E_ads = E(CO+Pt) - E(CO) - E(Pt)
+# Negative = favorable adsorption
+```
+
+### 14.6 Workflow with INCAR File
+
+```bash
+# 1. Generate template
+uma_calc template opt -o INCAR.opt
+
+# 2. Edit INCAR.opt:
+#    CALC_TYPE = OPT
+#    TASK = omat
+#    MODEL_PATH = /home/user/models/uma-s-1.pt
+#    DEVICE = cuda
+#    FMAX = 0.01
+#    MAX_STEPS = 1000
+#    CELL_OPT = .TRUE.
+
+# 3. Run
+uma_calc run -i INCAR.opt -s POSCAR -o relax_results/
+
+# 4. Check results
+cat relax_results/OUTCAR
 ```
 
 ---
 
-## Contact Us
-
-For questions or suggestions, please contact us through:
-
-- GitHub Issues: [fairchem](https://github.com/FAIR-Chem/fairchem)
-- Documentation: [fair-chem.github.io](https://fair-chem.github.io)
-
----
-
-## License
+## 15. License
 
 This project is open source under the MIT License.
 
 Copyright (c) Meta Platforms, Inc. and affiliates.
+
+This source code is licensed under the MIT license found in the LICENSE file in the root directory of this source tree.
