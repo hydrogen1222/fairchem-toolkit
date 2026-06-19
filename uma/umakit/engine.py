@@ -12,6 +12,7 @@ Provides CalculationEngine as the single entry point for CLI, TUI, and API.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -195,7 +196,15 @@ class CalculationEngine:
             loop.call_soon_threadsafe(queue.put_nowait, event)
 
         def blocking_work() -> dict[str, Any]:
-            return self.run(atoms, progress_callback=progress_callback)
+            try:
+                return self.run(atoms, progress_callback=progress_callback)
+            except Exception as exc:
+                event = ProgressEvent(
+                    phase="error",
+                    message=f"Calculation failed: {exc}",
+                )
+                loop.call_soon_threadsafe(queue.put_nowait, event)
+                raise
 
         task = loop.run_in_executor(None, blocking_work)
 
@@ -209,7 +218,8 @@ class CalculationEngine:
             task.cancel()
             yield ProgressEvent(phase="error", message="Calculation cancelled by user")
         finally:
-            await task
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
 
     def run_batch(
         self,
@@ -237,5 +247,6 @@ class CalculationEngine:
             max_workers=opts.get("max_workers", 1),
             verbose=False,
             job_name=self.config.job_name,
+            progress_callback=progress_callback,
         )
         return runner.run_from_files(files)
