@@ -216,7 +216,8 @@ class CalculationEngine:
                     break
         except asyncio.CancelledError:
             task.cancel()
-            yield ProgressEvent(phase="error", message="Calculation cancelled by user")
+            # Don't yield here — async generators shouldn't yield
+            # during CancelledError. The caller handles cleanup.
         finally:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
