@@ -13,7 +13,8 @@ uv pip install -e ".[dev]"
 cd ../../uma
 uv pip install -e .
 
-# 3. Run
+# 3. Verify & run
+uv run uma_calc doctor              # comprehensive environment diagnostic
 uv run uma_calc --help              # show all commands
 uv run uma_calc tui                 # launch interactive TUI
 uv run uma_calc template sp         # generate INCAR template

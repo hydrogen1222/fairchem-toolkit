@@ -50,6 +50,9 @@ Examples:
   # Batch processing
   uma_calc batch structures/ --pattern "*.cif" --output results/
 
+  # Run environment diagnostic (recommended after install!)
+  uma_calc doctor
+
   # Generate template INCAR
   uma_calc template sp
         """,
@@ -374,6 +377,19 @@ Examples:
         description="Launch interactive terminal UI for visual configuration",
     )
 
+    # doctor command
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="Run environment diagnostic checks",
+        description="Check Python, PyTorch, CUDA, GPU compatibility, and model file",
+    )
+    doctor_parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Path to model checkpoint to verify",
+    )
+
     # jobs command
     jobs_parser = subparsers.add_parser("jobs", help="List background jobs")
     jobs_parser.add_argument(
@@ -666,6 +682,15 @@ def cmd_tui(args: argparse.Namespace) -> int:
     return app.run()
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """Run environment diagnostic checks."""
+    from umakit.doctor import run_diagnostics, format_diagnostics  # noqa: PLC0415
+
+    checks, failures = run_diagnostics(model_path=args.model)
+    print(format_diagnostics(checks))
+    return 0 if failures == 0 else 1
+
+
 def cmd_jobs(args: argparse.Namespace) -> int:
     """List background jobs."""
     from umakit.jobs import JobManager  # noqa: PLC0415
@@ -752,6 +777,7 @@ def main(argv: list[str] | None = None) -> int:
         "md": cmd_md,
         "batch": cmd_batch,
         "template": cmd_template,
+        "doctor": cmd_doctor,
         "jobs": cmd_jobs,
         "kill": cmd_kill,
         "clean": cmd_clean,

@@ -150,10 +150,14 @@ The model path is specified with `--model` (CLI), in the TUI config screen, or v
 ### 2.6 Verify Installation
 
 ```bash
-uv run uma_calc --help
+uv run uma_calc doctor
 ```
 
-Should print the help message with all available subcommands: `sp`, `opt`, `md`, `batch`, `run`, `template`, `jobs`, `kill`, `clean`, `tui`.
+This runs a comprehensive diagnostic: Python, PyTorch, CUDA, GPU compatibility, fairchem-core, UMAKit, and model file. If any check fails, it prints exact fix commands.
+
+For a full command list:
+```bash
+uv run uma_calc --help
 
 ---
 

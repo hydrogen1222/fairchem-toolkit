@@ -44,7 +44,10 @@ demos, and application efforts for materials science and quantum chemistry.
 > cd ../../uma
 > uv pip install -e .
 > 
-> # 3. Run (two equivalent methods)
+> # 3. Verify your environment
+> uv run uma_calc doctor            # comprehensive diagnostic (recommended!)
+> 
+> # 4. Run (two equivalent methods)
 > uv run uma_calc tui                # method A: uv run (auto-detects venv)
 > # OR
 > source ../.venv/bin/activate       # method B: activate venv first

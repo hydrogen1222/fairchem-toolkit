@@ -150,10 +150,14 @@ uma_calc tui
 ### 2.6 验证安装
 
 ```bash
-uv run uma_calc --help
+uv run uma_calc doctor
 ```
 
-应打印帮助信息，显示所有可用的子命令：`sp`、`opt`、`md`、`batch`、`run`、`template`、`jobs`、`kill`、`clean`、`tui`。
+这会运行全面诊断：Python、PyTorch、CUDA、GPU 兼容性、fairchem-core、UMAKit 和模型文件。如果有任何检查失败，它会打印出精确的修复命令。
+
+查看完整命令列表：
+```bash
+uv run uma_calc --help
 
 ---
 
