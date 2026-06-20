@@ -31,14 +31,9 @@ where = ["."]
 line-length = 88
 target-version = "py39"
 
-# GPU compatibility — see `uma_calc doctor` for guidance.
-# Pascal GPUs (GTX 10xx, P104-100, P100: CC 6.1) are NOT supported by
-# PyTorch 2.7+ (ALL CUDA variants dropped sm_6x).
+# GPU compatibility — see `uv run uma_calc doctor` for guidance.
+# sm_61 GPUs (GTX 10xx, P104-100): NEVER supported by ANY pre-built
+# PyTorch wheel. Only sm_50+sm_60 (P100) are compiled.
+# Fix: --device cpu, or build PyTorch from source with sm_61.
 #
-# Fix: downgrade torch to 2.6.0 (last with sm_6x).
-# NOTE: torch 2.6.0 requires Python <= 3.12 (no cp313 wheel).
-# With Python 3.13+, the only option is CPU mode: --device cpu.
-#
-# [tool.uv]
-# override-dependencies = ["torch==2.6.0+cu126"]
-# # Then run: uv sync && uv run uma_calc doctor
+# sm_80+ GPUs (RTX 20xx+, A100, etc.): fully supported.

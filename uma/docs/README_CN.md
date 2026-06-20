@@ -903,30 +903,26 @@ CUDA_VISIBLE_DEVICES=0 uma_calc sp structure.cif --model uma-s-1.pt --device cud
 
 #### "no kernel image is available for execution on the device"
 
-**原因：** PyTorch 预编译的 CUDA 内核不包含你的 GPU 架构。通常发生在 **PyTorch 2.7+ 配合 CUDA 12.8**，该版本从默认构建中移除了 Pascal GPU（CC 6.x：GTX 10xx 系列、P104-100、P100 等）。
+**原因：** GPU 需要的内核从未被包含在任何预编译 PyTorch wheel 中。
 
-> **Pascal GPU 并非天生不兼容**——它们在 PyTorch 2.4–2.6（CUDA 12.1–12.6）上完全正常工作。
+| GPU | CC | 状态 |
+|-----|-----|------|
+| GTX 1080 Ti, GTX 1070, GTX 1060 | sm_61 | ❌ 从未支持 |
+| P104-100, P102-100 | sm_61 | ❌ 从未支持 |
+| Tesla P100 | sm_60 | ✅ 所有版本均支持 |
+| RTX 20xx+, GTX 16xx | sm_75+ | ✅ 支持 |
+
+> **PyTorch 仅为数据中心级 Pascal（P100）编译 sm_50+sm_60，从未包含消费级 Pascal（GTX 10xx、P104-100）的 sm_61。这不是版本退化——任何 PyTorch 版本都从未包含 sm_61。**
 
 **诊断：**
 ```bash
-uv run python -c "
-import torch
-print(f'PyTorch: {torch.__version__}, CUDA: {torch.version.cuda}')
-print(f'GPU: {torch.cuda.get_device_name(0)}')
-print(f'Compute Capability: {torch.cuda.get_device_capability(0)}')
-print(f'Arch list: {torch.cuda.get_arch_list()}')
-"
+uv run uma_calc doctor  # 显示 GPU 的 CC 以及 PyTorch 是否支持
 ```
-如果你的 GPU 的 `sm_xx` 不在 arch list 中，说明当前构建缺少该架构的内核。
 
 **解决方案：**
-| Python | PyTorch | Pascal GPU (CC 6.x) | 解决方案 |
-|--------|---------|---------------------|----------|
-| **3.13+** | 2.8.0+ | ❌ 所有 CUDA 变体均不含 sm_6x | `--device cpu`（唯一选项） |
-| **3.12** | 2.6.0+cu126 | ✅ 支持 | 在 `pyproject.toml` 的 `[tool.uv]` 中添加 `override-dependencies = ["torch==2.6.0+cu126"]`，然后 `uv sync` |
-| **3.9–3.12** | 2.8.0+ | ❌ 所有 CUDA 变体均已移除 sm_6x | 同上 3.12 方案 |
-
-> **原因：** PyTorch 2.7+ 从所有 CUDA 变体（cu126, cu128, cu129）中移除了 Pascal（sm_6x）内核。Torch 2.6.0 是最后支持 Pascal 的版本，但没有 Python 3.13 wheel。如果你使用 Python 3.13 + Pascal GPU，CPU 模式是唯一选择。
+1. 使用 CPU 模式：`--device cpu`（立即生效）
+2. 从源码编译 PyTorch：`TORCH_CUDA_ARCH_LIST="6.1" python setup.py develop`
+3. 更换为 sm_60（Tesla P100）或 sm_70+（任何 RTX/Volta 显卡）的 GPU
 
 #### CUDA 显存不足
 

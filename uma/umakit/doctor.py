@@ -118,29 +118,17 @@ def run_diagnostics(
                     }
                 )
             else:
-                cuda_ver = torch.version.cuda or "unknown"
-                py_major = sys.version_info.major
-                py_minor = sys.version_info.minor
-                py_supported_26 = (py_major, py_minor) <= (3, 12)
-
-                if py_supported_26:
-                    fixes = [
-                        "# torch 2.6.0+cu126 is the last build with Pascal (sm_6x) support.",
-                        "# fairchem-core requires torch~=2.8.0, so we override it.",
-                        "# Add this to [tool.uv] in uma/pyproject.toml, then: uv sync",
-                        'override-dependencies = ["torch==2.6.0+cu126"]',
-                    ]
-                else:
-                    fixes = [
-                        f"Python {py_major}.{py_minor} only supports torch>=2.8, which dropped",
-                        "sm_6x across ALL CUDA variants (cu126/cu128/cu129 are identical).",
-                        "torch 2.6.0 (last with sm_6x) has no Python 3.13 wheels.",
-                        "",
-                        "Workable options:",
-                        "  1. Use CPU mode: --device cpu  (works immediately)",
-                        "  2. Downgrade Python to 3.12, then use torch==2.6.0+cu126",
-                        '  3. Build torch from source: TORCH_CUDA_ARCH_LIST="6.1"',
-                    ]
+                fixes = [
+                    f"GPU {gpu_cc} (CC {major}.{minor}) has NO pre-built PyTorch wheel.",
+                    "All PyTorch versions (2.x, 1.x) only compile sm_50+sm_60 for",
+                    "datacenter Pascal (P100). sm_61 (GTX 10xx, P104-100) was never",
+                    "included in ANY pre-built PyTorch binary.",
+                    "",
+                    "Workable options:",
+                    "  1. Use CPU mode: --device cpu  (works immediately)",
+                    f'  2. Build PyTorch from source: TORCH_CUDA_ARCH_LIST="{gpu_cc}"',
+                    "  3. Replace GPU with sm_60 (Tesla P100) or sm_70+ (Volta+)",
+                ]
 
                 checks.append(
                     {
@@ -149,7 +137,7 @@ def run_diagnostics(
                         "status": "fail",
                         "detail": (
                             f"Architecture {gpu_cc} — NOT in PyTorch build ({', '.join(arch_list)}).\n"
-                            f"  PyTorch {torch_ver} (CUDA {cuda_ver}) dropped Pascal/Maxwell kernels.\n"
+                            f"  sm_61 was NEVER included in ANY pre-built PyTorch wheel.\n"
                             f"\n" + "\n".join(f"  {f}" for f in fixes) + "\n"
                             "  After fixing, re-run: uv run uma_calc doctor"
                         ),

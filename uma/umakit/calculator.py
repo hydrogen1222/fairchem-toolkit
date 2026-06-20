@@ -118,35 +118,22 @@ class UMACalculator:
             arch_list = torch.cuda.get_arch_list()
             if arch_list and gpu_cc not in arch_list:
                 gpu_name = torch.cuda.get_device_name(0)
-                cuda_ver = torch.version.cuda or "unknown"
-                torch_ver = torch.__version__
 
                 raise RuntimeError(
                     f"\n{'=' * 68}\n"
-                    f" PyTorch build does not include CUDA kernels for your GPU\n"
+                    f" GPU NOT SUPPORTED: {gpu_name}\n"
                     f"{'=' * 68}\n\n"
-                    f"  GPU:         {gpu_name}\n"
-                    f"  Architecture: {gpu_cc} (Compute Capability {major}.{minor})\n"
-                    f"  PyTorch:     {torch_ver} (CUDA {cuda_ver})\n\n"
-                    f"  This PyTorch build only includes kernels for: {arch_list}\n"
-                    f"  Your GPU ({gpu_cc}) is NOT in that list.\n\n"
-                    f"  Why: PyTorch 2.7+ with CUDA 12.8 dropped pre-built Pascal\n"
-                    f"  (CC 6.x) kernels. Pascal GPUs are NOT inherently incompatible\n"
-                    f"  — they work fine with PyTorch 2.4–2.6 / CUDA 12.1–12.6.\n\n"
-                    f"  Solutions (pick one):\n"
-                    f"    1. Install a PyTorch build that includes {gpu_cc}:\n"
-                    f"       pip install torch==2.8.0 --index-url \\\n"
-                    f"           https://download.pytorch.org/whl/cu124\n"
-                    f"       (CUDA 12.4 variant may still include sm_6x kernels)\n"
-                    f"    2. Downgrade to PyTorch 2.6 + CUDA 12.6:\n"
-                    f"       pip install torch==2.6.0 --index-url \\\n"
-                    f"           https://download.pytorch.org/whl/cu126\n"
-                    f"       (Last version confirmed to support Pascal GPUs)\n"
-                    f"    3. Use CPU mode: --device cpu\n"
-                    f"    4. Build PyTorch from source:\n"
-                    f'       TORCH_CUDA_ARCH_LIST="{gpu_cc}" python setup.py develop\n\n'
-                    f"  Check available PyTorch builds:\n"
-                    f"  https://pytorch.org/get-started/locally/\n"
+                    f"  Architecture: {gpu_cc} (CC {major}.{minor})\n"
+                    f"  PyTorch kernels: {arch_list}\n\n"
+                    f"  Your GPU ({gpu_cc}) was NEVER included in ANY pre-built\n"
+                    f"  PyTorch wheel. PyTorch compiles sm_50+sm_60 for datacenter\n"
+                    f"  Pascal (Tesla P100) but NOT sm_61 (GTX 10xx, P104-100).\n"
+                    f"  This is NOT a version issue — no PyTorch version supports sm_61.\n\n"
+                    f"  Options:\n"
+                    f"    1. Use CPU mode: --device cpu\n"
+                    f"    2. Build PyTorch from source:\n"
+                    f'       TORCH_CUDA_ARCH_LIST="{gpu_cc}" python setup.py develop\n'
+                    f"    3. Use a GPU with sm_60 (Tesla P100) or sm_70+ (Volta+)\n"
                     f"{'=' * 68}\n"
                 )
         except RuntimeError:

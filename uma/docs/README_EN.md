@@ -1078,30 +1078,26 @@ CUDA_VISIBLE_DEVICES=0,1 uma_calc sp structure.cif --model uma-s-1.pt --device c
 
 #### "no kernel image is available for execution on the device"
 
-**Cause:** Your PyTorch build does not include pre-compiled CUDA kernels for your GPU's architecture (Compute Capability). This typically happens with **PyTorch 2.7+ with CUDA 12.8**, which dropped Pascal GPUs (CC 6.x: GTX 10xx series, P104-100, P100, etc.) from its default build.
+**Cause:** Your GPU requires CUDA kernels that were never included in ANY pre-built PyTorch wheel. This affects:
 
-> **Pascal GPUs are NOT inherently incompatible** — they work fine with PyTorch 2.4–2.6 (CUDA 12.1–12.6).
+| GPU | CC | Status |
+|-----|-----|--------|
+| GTX 1080 Ti, GTX 1070, GTX 1060 | sm_61 | ❌ Never supported |
+| P104-100, P102-100 | sm_61 | ❌ Never supported |
+| Tesla P100 | sm_60 | ✅ Supported (all versions) |
+| RTX 20xx+, GTX 16xx | sm_75+ | ✅ Supported |
+
+> **PyTorch compiles sm_50+sm_60 for datacenter Pascal (P100) but NOT sm_61 for consumer Pascal (GTX 10xx, P104-100). This is NOT a version regression — no PyTorch version ever included sm_61.**
 
 **Diagnose:**
 ```bash
-uv run python -c "
-import torch
-print(f'PyTorch: {torch.__version__}, CUDA: {torch.version.cuda}')
-print(f'GPU: {torch.cuda.get_device_name(0)}')
-print(f'Capability: {torch.cuda.get_device_capability(0)}')
-print(f'Arch list: {torch.cuda.get_arch_list()}')
-"
+uv run uma_calc doctor  # shows your GPU's CC and whether PyTorch supports it
 ```
-If your GPU's `sm_xx` is not in the arch list, the build lacks kernels for it.
 
 **Solutions:**
-| Python | PyTorch | Pascal GPU (CC 6.x) | Remedy |
-|--------|---------|---------------------|--------|
-| **3.13+** | 2.8.0+ | ❌ No sm_6x in any CUDA variant | `--device cpu` (only option) |
-| **3.12** | 2.6.0+cu126 | ✅ Supported | Add `override-dependencies = ["torch==2.6.0+cu126"]` to `[tool.uv]` in `pyproject.toml`, then `uv sync` |
-| **3.9–3.12** | 2.8.0+ | ❌ All CUDA variants dropped sm_6x | Same as 3.12 row above |
-
-> **Why:** PyTorch 2.7+ removed Pascal (sm_6x) kernels from ALL CUDA variants (cu126, cu128, cu129). Torch 2.6.0 is the last version with Pascal support, but has no Python 3.13 wheel. If you're on Python 3.13 with a Pascal GPU, CPU mode is the only option.
+1. Use CPU mode: `--device cpu` (works immediately)
+2. Build PyTorch from source: `TORCH_CUDA_ARCH_LIST="6.1" python setup.py develop`
+3. Replace GPU with sm_60 (Tesla P100) or sm_70+ (any RTX/Volta card)
 
 #### CUDA Out of Memory
 
