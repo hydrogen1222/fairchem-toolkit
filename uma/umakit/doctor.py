@@ -119,18 +119,28 @@ def run_diagnostics(
                 )
             else:
                 cuda_ver = torch.version.cuda or "unknown"
-                # Step 1: try same torch version with CUDA 12.4 (may include sm_6x)
-                # Step 2: override fairchem-core's torch~=2.8 pin to use 2.6
-                fixes = [
-                    f"# Option A: same torch=={torch_ver} with CUDA 12.4 (may keep sm_6x)",
-                    f"uv pip install --reinstall torch=={torch_ver} \\",
-                    "    --index-url https://download.pytorch.org/whl/cu124",
-                    "",
-                    "# Option B: override fairchem-core torch pin, use torch 2.6 + CUDA 12.6",
-                    "# Add this to pyproject.toml under [tool.uv]:",
-                    'override-dependencies = ["torch==2.6.0+cu126"]',
-                    "# Then: uv sync && uv lock",
-                ]
+                py_major = sys.version_info.major
+                py_minor = sys.version_info.minor
+                py_supported_26 = (py_major, py_minor) <= (3, 12)
+
+                if py_supported_26:
+                    fixes = [
+                        "# torch 2.6.0+cu126 is the last build with Pascal (sm_6x) support.",
+                        "# fairchem-core requires torch~=2.8.0, so we override it.",
+                        "# Add this to [tool.uv] in uma/pyproject.toml, then: uv sync",
+                        'override-dependencies = ["torch==2.6.0+cu126"]',
+                    ]
+                else:
+                    fixes = [
+                        f"Python {py_major}.{py_minor} only supports torch>=2.8, which dropped",
+                        "sm_6x across ALL CUDA variants (cu126/cu128/cu129 are identical).",
+                        "torch 2.6.0 (last with sm_6x) has no Python 3.13 wheels.",
+                        "",
+                        "Workable options:",
+                        "  1. Use CPU mode: --device cpu  (works immediately)",
+                        "  2. Downgrade Python to 3.12, then use torch==2.6.0+cu126",
+                        '  3. Build torch from source: TORCH_CUDA_ARCH_LIST="6.1"',
+                    ]
 
                 checks.append(
                     {

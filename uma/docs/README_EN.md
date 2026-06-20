@@ -1095,16 +1095,13 @@ print(f'Arch list: {torch.cuda.get_arch_list()}')
 If your GPU's `sm_xx` is not in the arch list, the build lacks kernels for it.
 
 **Solutions:**
-1. Try a different PyTorch 2.8 CUDA variant (CUDA 12.4 may still include Pascal kernels):
-   ```bash
-   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu124
-   ```
-2. Downgrade to PyTorch 2.6 + CUDA 12.6 (confirmed Pascal support):
-   ```bash
-   pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
-   ```
-3. Use CPU: `--device cpu`
-4. Build PyTorch from source with `TORCH_CUDA_ARCH_LIST="6.1"`
+| Python | PyTorch | Pascal GPU (CC 6.x) | Remedy |
+|--------|---------|---------------------|--------|
+| **3.13+** | 2.8.0+ | ❌ No sm_6x in any CUDA variant | `--device cpu` (only option) |
+| **3.12** | 2.6.0+cu126 | ✅ Supported | Add `override-dependencies = ["torch==2.6.0+cu126"]` to `[tool.uv]` in `pyproject.toml`, then `uv sync` |
+| **3.9–3.12** | 2.8.0+ | ❌ All CUDA variants dropped sm_6x | Same as 3.12 row above |
+
+> **Why:** PyTorch 2.7+ removed Pascal (sm_6x) kernels from ALL CUDA variants (cu126, cu128, cu129). Torch 2.6.0 is the last version with Pascal support, but has no Python 3.13 wheel. If you're on Python 3.13 with a Pascal GPU, CPU mode is the only option.
 
 #### CUDA Out of Memory
 

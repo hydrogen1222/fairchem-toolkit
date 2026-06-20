@@ -920,16 +920,13 @@ print(f'Arch list: {torch.cuda.get_arch_list()}')
 如果你的 GPU 的 `sm_xx` 不在 arch list 中，说明当前构建缺少该架构的内核。
 
 **解决方案：**
-1. 尝试 PyTorch 2.8 的其他 CUDA 变体（CUDA 12.4 可能仍包含 Pascal 内核）：
-   ```bash
-   pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu124
-   ```
-2. 降级到 PyTorch 2.6 + CUDA 12.6（确认支持 Pascal）：
-   ```bash
-   pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
-   ```
-3. 使用 CPU：`--device cpu`
-4. 从源码编译 PyTorch：设置 `TORCH_CUDA_ARCH_LIST="6.1"`
+| Python | PyTorch | Pascal GPU (CC 6.x) | 解决方案 |
+|--------|---------|---------------------|----------|
+| **3.13+** | 2.8.0+ | ❌ 所有 CUDA 变体均不含 sm_6x | `--device cpu`（唯一选项） |
+| **3.12** | 2.6.0+cu126 | ✅ 支持 | 在 `pyproject.toml` 的 `[tool.uv]` 中添加 `override-dependencies = ["torch==2.6.0+cu126"]`，然后 `uv sync` |
+| **3.9–3.12** | 2.8.0+ | ❌ 所有 CUDA 变体均已移除 sm_6x | 同上 3.12 方案 |
+
+> **原因：** PyTorch 2.7+ 从所有 CUDA 变体（cu126, cu128, cu129）中移除了 Pascal（sm_6x）内核。Torch 2.6.0 是最后支持 Pascal 的版本，但没有 Python 3.13 wheel。如果你使用 Python 3.13 + Pascal GPU，CPU 模式是唯一选择。
 
 #### CUDA 显存不足
 
