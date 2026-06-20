@@ -118,17 +118,19 @@ def run_diagnostics(
                     }
                 )
             else:
-                # Build exact fix commands
                 cuda_ver = torch.version.cuda or "unknown"
+                # Step 1: try same torch version with CUDA 12.4 (may include sm_6x)
+                # Step 2: override fairchem-core's torch~=2.8 pin to use 2.6
                 fixes = [
-                    "uv pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126",
+                    f"# Option A: same torch=={torch_ver} with CUDA 12.4 (may keep sm_6x)",
+                    f"uv pip install --reinstall torch=={torch_ver} \\",
+                    "    --index-url https://download.pytorch.org/whl/cu124",
+                    "",
+                    "# Option B: override fairchem-core torch pin, use torch 2.6 + CUDA 12.6",
+                    "# Add this to pyproject.toml under [tool.uv]:",
+                    'override-dependencies = ["torch==2.6.0+cu126"]',
+                    "# Then: uv sync && uv lock",
                 ]
-                # Also suggest CUDA 12.4 variant of current torch if available
-                if torch_ver.startswith("2.8"):
-                    fixes.insert(
-                        0,
-                        f"uv pip install torch=={torch_ver} --index-url https://download.pytorch.org/whl/cu124",
-                    )
 
                 checks.append(
                     {
@@ -137,9 +139,9 @@ def run_diagnostics(
                         "status": "fail",
                         "detail": (
                             f"Architecture {gpu_cc} — NOT in PyTorch build ({', '.join(arch_list)}).\n"
-                            f"  This PyTorch {torch_ver} (CUDA {cuda_ver}) dropped Pascal/Maxwell kernels.\n"
-                            f"  Fix commands:\n"
-                            + "\n".join(f"    • {f}" for f in fixes)
+                            f"  PyTorch {torch_ver} (CUDA {cuda_ver}) dropped Pascal/Maxwell kernels.\n"
+                            f"\n" + "\n".join(f"  {f}" for f in fixes) + "\n"
+                            "  After fixing, re-run: uv run uma_calc doctor"
                         ),
                     }
                 )
