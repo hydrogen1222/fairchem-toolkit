@@ -78,8 +78,8 @@ target/
 # IPython Notebook
 .ipynb_checkpoints
 
-# pyenv
-.python-version
+# pyenv local version — intentionally NOT ignored: uv reads .python-version
+# to pin the interpreter for everyone who clones this repo.
 
 # celery beat schedule file
 celerybeat-schedule
@@ -150,6 +150,15 @@ _build
 .venv/
 .ruff_cache/
 .uv/
+
+# UMA model checkpoints and local test structures (do not commit — large / user-specific)
+uma/uma-s-1.pt
+uma/Si.cif
+# Editor/process temp backups
+*.tmp.*
+# Calculation output artifacts
+results/
+/OUTPUT/
 
 # Superpowers working directory
 .superpowers/

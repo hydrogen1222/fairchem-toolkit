@@ -2,7 +2,7 @@
 name = "fairchem-workspace"
 version = "0.1.0"
 description = "Workspace for fairchem packages"
-requires-python = ">=3.10, <3.14"
+requires-python = ">=3.10, <3.13"
 dependencies = [
     "fairchem-core",
     "fairchem-applications-adsorbml",
@@ -16,6 +16,27 @@ members = [
     "packages/*",
     "uma",
 ]
+
+# PyTorch 2.7+ removed sm_50/sm_60 from its pre-built CUDA wheels, so Pascal GPUs
+# (sm_61: GTX 10xx, P104-100) have no kernel and --device cuda fails with
+# "no kernel image". sm_60 kernels are binary-compatible with sm_61, so we pin
+# torch 2.6.0+cu124 (which still ships sm_60) from the PyTorch cu124 index.
+# Override fairchem-core's `torch~=2.8.0` pin; see `uv run uma_calc doctor`.
+[tool.uv]
+override-dependencies = [
+    "torch==2.6.0+cu124",
+    "triton==3.2.0",
+]
+
+[[tool.uv.index]]
+name = "tuna"
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+default = true
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 
 [tool.uv.sources]
 fairchem-core = { workspace = true }
@@ -31,3 +52,4 @@ fairchem-applications-ocx = { workspace = true }
 fairchem-demo-ocpapi = { workspace = true }
 fairchem-lammps = { workspace = true }
 umakit = { workspace = true }
+torch = { index = "pytorch-cu124" }

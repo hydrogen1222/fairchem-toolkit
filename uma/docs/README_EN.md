@@ -90,13 +90,15 @@ Unlike VASP, which solves the Kohn-Sham equations self-consistently, UMAKit uses
 git clone https://github.com/FAIR-Chem/fairchem.git
 cd fairchem
 
-# Step 1: Install fairchem-core (REQUIRED — must be done first)
-cd packages/fairchem-core
-uv pip install -e ".[dev]"
+# Step 1: Detect your GPU and get the matching PyTorch command (CPU-only users
+#         can skip). Uses nvidia-smi, works before PyTorch is installed.
+uv run uma_calc setup
 
-# Step 2: Install UMAKit
-cd ../../uma
-uv pip install -e .
+# Step 2: Create a pinned venv (Python 3.12 via .python-version) and install
+#         everything from the lockfile. uv auto-creates .venv.
+#         Do NOT use `pip install -r requirements.txt` — that is the upstream CI
+#         test snapshot (torch 2.8) and conflicts with this fork's GPU setup.
+uv sync
 ```
 
 ### 2.3 CUDA GPU vs CPU Installation
@@ -1078,26 +1080,35 @@ CUDA_VISIBLE_DEVICES=0,1 uma_calc sp structure.cif --model uma-s-1.pt --device c
 
 #### "no kernel image is available for execution on the device"
 
-**Cause:** Your GPU requires CUDA kernels that were never included in ANY pre-built PyTorch wheel. This affects:
+**Cause:** Your PyTorch build has no CUDA kernel compatible with your GPU. PyTorch 2.7+ removed `sm_50`/`sm_60` from its pre-built CUDA wheels, so Maxwell/Pascal GPUs (compute capability 5.x/6.x) lost their matching kernels.
 
-| GPU | CC | Status |
+| GPU family | CC | Recommended torch |
 |-----|-----|--------|
-| GTX 1080 Ti, GTX 1070, GTX 1060 | sm_61 | ❌ Never supported |
-| P104-100, P102-100 | sm_61 | ❌ Never supported |
-| Tesla P100 | sm_60 | ✅ Supported (all versions) |
-| RTX 20xx+, GTX 16xx | sm_75+ | ✅ Supported |
+| Maxwell (GTX 750/9xx, incl. GTX 960) | sm_50/52 | `torch==2.6.0+cu124` |
+| Pascal (GTX 10xx, P104-100) | sm_60/61 | `torch==2.6.0+cu124` |
+| Volta–Hopper (V100…H100, RTX 20/30/40) | sm_70–90 | `torch==2.6.0+cu124` |
+| Blackwell (RTX 50) | sm_100/120 | `torch==2.8.0+cu128` |
+| Kepler (GTX 700/600) | sm_30/37 | not supported |
 
-> **PyTorch compiles sm_50+sm_60 for datacenter Pascal (P100) but NOT sm_61 for consumer Pascal (GTX 10xx, P104-100). This is NOT a version regression — no PyTorch version ever included sm_61.**
+> **`sm_50`/`sm_60` kernels are binary-compatible with `sm_52`/`sm_61` devices** (minor-revision compatibility within the same major). So a PyTorch build that still ships `sm_50`/`sm_60` — e.g. the `torch 2.6.0+cu124` wheel — drives GTX 960 (sm_52) and P104-100 (sm_61) correctly. Only torch 2.7+ is the problem, not the GPU itself.
 
-**Diagnose:**
+**Diagnose (works even before torch is installed):**
 ```bash
-uv run uma_calc doctor  # shows your GPU's CC and whether PyTorch supports it
+uv run uma_calc setup      # detect GPU + print the exact torch command
+uv run python -c "import torch; print(torch.__version__, torch.cuda.get_arch_list())"
+uv run uma_calc doctor     # shows your GPU's CC and whether PyTorch supports it
 ```
 
-**Solutions:**
-1. Use CPU mode: `--device cpu` (works immediately)
-2. Build PyTorch from source: `TORCH_CUDA_ARCH_LIST="6.1" python setup.py develop`
-3. Replace GPU with sm_60 (Tesla P100) or sm_70+ (any RTX/Volta card)
+**Solutions (preferred first):**
+1. Install the recommended PyTorch build for your GPU (see table above):
+   ```bash
+   clashctl on  # enable proxy if needed
+   uv pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124   # Maxwell–Hopper
+   # uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128  # Blackwell
+   ```
+2. Build PyTorch from source with the needed kernels: `TORCH_CUDA_ARCH_LIST="6.0;6.1" python setup.py develop`
+3. Fall back to CPU: `--device cpu`
+
 
 #### CUDA Out of Memory
 

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "umakit"
 version = "1.0.0"
 description = "VASP-like CLI/TUI interface for FAIRChem UMA models"
-requires-python = ">=3.9"
+requires-python = ">=3.10, <3.13"
 dependencies = [
     "ase>=3.26.0",
     "numpy",
@@ -31,9 +31,13 @@ where = ["."]
 line-length = 88
 target-version = "py39"
 
-# GPU compatibility — see `uv run uma_calc doctor` for guidance.
-# sm_61 GPUs (GTX 10xx, P104-100): NEVER supported by ANY pre-built
-# PyTorch wheel. Only sm_50+sm_60 (P100) are compiled.
-# Fix: --device cpu, or build PyTorch from source with sm_61.
-#
-# sm_80+ GPUs (RTX 20xx+, A100, etc.): fully supported.
+# GPU compatibility — run `uv run uma_calc setup` (uses nvidia-smi, works
+# before torch is installed) to detect your GPU and get the exact torch command.
+# Support floor: Maxwell (GTX 900 series, sm_50/52). Kepler (GTX 700/600) not
+# supported (no prebuilt PyTorch wheel).
+#   Maxwell/Pascal (sm_50/52/60/61) + Volta~Hopper (sm_70~90):
+#     uv pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+#     (torch 2.7+ dropped sm_50/sm_60; sm_50/sm_60 kernels binary-compat with sm_52/sm_61)
+#   Blackwell (RTX 50, sm_100/120):
+#     uv pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+#   or build from source: TORCH_CUDA_ARCH_LIST="6.0;6.1" python setup.py develop

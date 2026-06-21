@@ -5,13 +5,13 @@ A VASP-compatible CLI / TUI / Python API for FAIRChem UMA machine-learning inter
 ## Quick Start
 
 ```bash
-# 1. Install fairchem-core first (NOT on PyPI — install from local packages/)
-cd ../packages/fairchem-core
-uv pip install -e ".[dev]"
+# 1. Detect your GPU and get the matching PyTorch command (CPU-only users can skip).
+uv run uma_calc setup
 
-# 2. Install UMAKit
-cd ../../uma
-uv pip install -e .
+# 2. Create a pinned venv (Python 3.12) + install everything from the lockfile.
+#    uv auto-creates .venv. Do NOT use `pip install -r requirements.txt`
+#    (that's the upstream CI snapshot, torch 2.8 — conflicts with this fork).
+uv sync
 
 # 3. Verify & run
 uv run uma_calc doctor              # comprehensive environment diagnostic
@@ -33,6 +33,24 @@ UMAKit itself does not ship PyTorch — it inherits whatever PyTorch fairchem-co
 ```bash
 uv run python -c "import torch; print('CUDA OK' if torch.cuda.is_available() else 'CPU only')"
 ```
+
+> **GPU install guidance (supports GTX 900 series and newer):** The right PyTorch build depends on your GPU's compute capability. Run this **before** installing torch — it uses `nvidia-smi` and works even with no PyTorch installed yet:
+> ```bash
+> uv run uma_calc setup      # detect GPU + print the exact torch install command
+> uv run uma_calc doctor     # verify after install
+> ```
+> Supported floor is **Maxwell (GTX 900 series, e.g. GTX 960)**; Kepler (GTX 700/600) is not supported (no prebuilt PyTorch wheel). The recommendation table:
+>
+> | GPU family | CC | Recommended torch |
+> |---|---|---|
+> | Maxwell (GTX 750/9xx) | sm_50/52 | `torch==2.6.0+cu124` |
+> | Pascal (GTX 10xx, P104-100) | sm_60/61 | `torch==2.6.0+cu124` |
+> | Volta–Hopper (V100…H100, RTX 20/30/40) | sm_70–90 | `torch==2.6.0+cu124` |
+> | Blackwell (RTX 50) | sm_100/120 | `torch==2.8.0+cu128` |
+> | Kepler (GTX 700/600) | sm_30/37 | not supported |
+>
+> Why: PyTorch 2.7+ dropped `sm_50`/`sm_60` from its prebuilt CUDA wheels, so old cards (Maxwell/Pascal) must stay on `torch 2.6.0+cu124`; its `sm_50`/`sm_60` kernels are binary-compatible with `sm_52`/`sm_61`. The workspace already pins `torch==2.6.0+cu124` by default, so `uv sync` works out of the box for Maxwell–Hopper; only Blackwell needs an override. If the download fails, enable a proxy first: `clashctl on`.
+
 
 ## Interfaces
 

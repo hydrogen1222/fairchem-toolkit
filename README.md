@@ -36,23 +36,25 @@ demos, and application efforts for materials science and quantum chemistry.
 > UMAKit provides a familiar VASP-style interface for running FAIRChem UMA machine-learning interatomic potential calculations. It supports CLI, TUI (interactive terminal UI), and Python API modes.
 > 
 > ```bash
-> # 1. Install fairchem-core first (NOT on PyPI — install from local packages/)
-> cd packages/fairchem-core
-> uv pip install -e ".[dev]"
-> 
-> # 2. Install UMAKit
-> cd ../../uma
-> uv pip install -e .
-> 
+> # 1. Detect your GPU and get the matching PyTorch command (uses nvidia-smi;
+> #    works even before PyTorch is installed; CPU-only users can skip this).
+> uv run uma_calc setup
+>
+> # 2. Create a pinned venv + install everything from the lockfile.
+> #    Python is pinned to 3.12 via .python-version; uv auto-creates .venv.
+> #    Do NOT use `pip install -r requirements.txt` — that file is the upstream
+> #    CI test snapshot (torch 2.8) and conflicts with this fork's GPU setup.
+> uv sync
+>
 > # 3. Verify your environment
 > uv run uma_calc doctor            # comprehensive diagnostic (recommended!)
-> 
+>
 > # 4. Run (two equivalent methods)
 > uv run uma_calc tui                # method A: uv run (auto-detects venv)
 > # OR
-> source ../.venv/bin/activate       # method B: activate venv first
+> source .venv/bin/activate          # method B: activate venv first
 > uma_calc tui
-> 
+>
 > # CLI examples
 > uv run uma_calc sp structure.cif --model uma-s-1.pt --task omat --device cuda
 > uv run uma_calc opt POSCAR --model uma-s-1.pt --fmax 0.02 --cell-opt
@@ -63,6 +65,13 @@ demos, and application efforts for materials science and quantum chemistry.
 > ```
 > 
 > **CUDA GPU:** Install fairchem-core in a CUDA-enabled environment (PyTorch with CUDA). `fairchem-core` depends on PyTorch — ensure your PyTorch build includes CUDA (`import torch; print(torch.cuda.is_available())`). UMAKit auto-detects CPU/CUDA.
+>
+> **GPU install guidance (supports GTX 900 series and newer):** The right PyTorch build depends on your GPU. Run **before** installing torch (uses `nvidia-smi`, works with no PyTorch yet):
+> ```bash
+> uv run uma_calc setup      # detect GPU + print the exact torch install command
+> uv run uma_calc doctor     # verify after install
+> ```
+> PyTorch 2.7+ dropped `sm_50`/`sm_60` from its prebuilt wheels, so old cards (Maxwell GTX 9xx, Pascal GTX 10xx / P104-100) must use `torch==2.6.0+cu124` (its `sm_50`/`sm_60` kernels are binary-compatible with `sm_52`/`sm_61`). This workspace pins `torch==2.6.0+cu124` by default — `uv sync` works out of the box for Maxwell through Hopper; only Blackwell (RTX 50) needs `torch==2.8.0+cu128`. Kepler (GTX 700/600) is not supported. If the download fails: `clashctl on`.
 > 
 > **CPU only:** fairchem-core installs with CPU PyTorch by default. UMAKit works with `--device cpu`.
 > 

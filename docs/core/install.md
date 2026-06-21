@@ -41,6 +41,28 @@ pip install -e src/packages/fairchem-core[dev]
 In V2, we removed all dependencies on 3rd party libraries such as torch-geometric, pyg, torch-scatter, torch-sparse etc that made installation difficult. So no additional steps are required!
 :::
 
+### GPU support (UMAKit / `uma_calc`)
+
+The right PyTorch build depends on your GPU's compute capability. The UMAKit CLI can detect your GPU and print the exact install command — it uses `nvidia-smi`, so it works **before** PyTorch is installed:
+
+```bash
+uv run uma_calc setup      # detect GPU + print the exact torch install command
+uv run uma_calc doctor     # verify after install
+```
+
+Supported floor: **Maxwell (GTX 900 series, e.g. GTX 960)**. Kepler (GTX 700/600) is not supported (no prebuilt PyTorch wheel).
+
+| GPU family | CC | Recommended torch |
+|---|---|---|
+| Maxwell (GTX 750/9xx) | sm_50/52 | `torch==2.6.0+cu124` |
+| Pascal (GTX 10xx, P104-100) | sm_60/61 | `torch==2.6.0+cu124` |
+| Volta–Hopper (V100…H100, RTX 20/30/40) | sm_70–90 | `torch==2.6.0+cu124` |
+| Blackwell (RTX 50) | sm_100/120 | `torch==2.8.0+cu128` |
+| Kepler (GTX 700/600) | sm_30/37 | not supported |
+
+PyTorch 2.7+ dropped `sm_50`/`sm_60` from its prebuilt CUDA wheels, so Maxwell/Pascal cards must stay on `torch 2.6.0+cu124` (its `sm_50`/`sm_60` kernels are binary-compatible with `sm_52`/`sm_61`). This workspace pins `torch==2.6.0+cu124` by default, so `uv sync` works out of the box for Maxwell–Hopper; only Blackwell needs the `cu128` override. If the download fails, enable a proxy first: `clashctl on`.
+
+
 ## Subpackages
 
 In addition to `fairchem-core`, there are related packages for specialized tasks or applications. Each can be installed with `pip` or `uv` just like `fairchem-core`:

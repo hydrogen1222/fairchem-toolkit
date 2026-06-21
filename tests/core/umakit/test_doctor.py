@@ -34,3 +34,43 @@ def test_doctor_with_nonexistent_model():
     model_check = [c for c in checks if c["name"] == "Model file"]
     assert len(model_check) == 1
     assert model_check[0]["status"] == "warn"
+
+
+def test_doctor_pre_torch_gives_gpu_specific_guidance(monkeypatch):
+    """When torch is missing but a GPU is detected, doctor must print the
+    GPU-specific torch install command (not a generic 'install torch')."""
+    import builtins
+
+    from umakit.gpu_setup import GpuInfo
+
+    real_import = builtins.__import__
+
+    def blocked(name, *a, **k):
+        if name == "torch" or name.startswith("torch."):
+            raise ImportError("simulated")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", blocked)
+    monkeypatch.setattr(
+        "umakit.doctor.detect_gpus",
+        lambda: [GpuInfo("NVIDIA P104-100", 6, 1, "580.167.08", 8192)],
+    )
+
+    checks, failures = run_diagnostics()
+    output = format_diagnostics(checks)
+
+    pt_check = [c for c in checks if c["name"] == "PyTorch"][0]
+    assert pt_check["status"] == "fail"
+    assert "2.6.0+cu124" in pt_check["detail"]
+    assert "uv pip install" in pt_check["detail"]
+    assert "NVIDIA driver" in [c["name"] for c in checks]
+    assert failures >= 1
+    assert "2.6.0+cu124" in output
+
+
+def test_doctor_no_gpu_cpu_guidance(monkeypatch):
+    """No nvidia-smi / no GPU: doctor warns about driver and suggests CPU."""
+    monkeypatch.setattr("umakit.doctor.detect_gpus", lambda: None)
+    checks, _ = run_diagnostics()
+    names = {c["name"]: c for c in checks}
+    assert names["NVIDIA driver"]["status"] == "warn"
