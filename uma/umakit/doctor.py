@@ -6,7 +6,9 @@
 """Environment diagnostic tool for UMA Calculator.
 
 Checks Python, PyTorch, CUDA, GPU compatibility, and model files.
-Provides exact fix commands when problems are found.
+Provides GPU-specific fix commands (works before PyTorch is installed via
+``nvidia-smi``). See :mod:`umakit.gpu_setup` for the detection/recommendation
+logic shared with ``uma_calc setup``.
 """
 
 from __future__ import annotations
@@ -15,8 +17,45 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from umakit.gpu_compat import arch_supports_device
+from umakit.gpu_setup import (
+    MIN_VRAM_MIB_WARN,
+    cc_arch_name,
+    detect_gpus,
+    recommend_torch,
+)
+
 if TYPE_CHECKING:
     from typing import Any
+
+
+def _recommendation_detail(rec, *, installed_torch: str | None = None) -> str:
+    """Build a detail string for a GPU from a TorchRecommendation."""
+    lines = [rec.rationale]
+    if not rec.supported:
+        lines.append("")
+        lines.append("  Use --device cpu, or upgrade to a Maxwell (GTX 900) GPU.")
+        return "\n  ".join(lines)
+
+    lines.append("")
+    if installed_torch is not None and installed_torch != rec.version:
+        # Normalize for comparison (drop local-version suffix on installed).
+        installed_base = installed_torch.split("+")[0]
+        rec_base = rec.version.split("+")[0]
+        if installed_base != rec_base:
+            lines.append(
+                f"  Installed torch ({installed_torch}) does NOT match the "
+                f"recommended ({rec.version}) for this GPU."
+            )
+            lines.append("  Switch to the recommended build:")
+    else:
+        lines.append("  Install / pin the recommended build:")
+    for cmd in rec.install_commands:
+        lines.append(f"    {cmd}")
+    lines.append("")
+    lines.append("  Or run:  uv run uma_calc setup")
+    lines.append("  After fixing, re-run:  uv run uma_calc doctor")
+    return "\n  ".join(lines)
 
 
 def run_diagnostics(
@@ -32,6 +71,9 @@ def run_diagnostics(
     """
     checks: list[dict[str, Any]] = []
     failures = 0
+
+    # Detect hardware GPUs via nvidia-smi (works without PyTorch).
+    hw_gpus = detect_gpus()
 
     # 1. Python version
     py_ver = (
@@ -50,19 +92,51 @@ def run_diagnostics(
         )
         failures += 1
 
-    # 2. PyTorch
+    # 2. NVIDIA driver (via nvidia-smi) — checked even before PyTorch.
+    if hw_gpus is None:
+        checks.append(
+            {
+                "name": "NVIDIA driver",
+                "value": "not found",
+                "status": "warn",
+                "detail": (
+                    "nvidia-smi unavailable. No NVIDIA driver detected.\n"
+                    "  Install the NVIDIA driver to use --device cuda,\n"
+                    "  or proceed with --device cpu."
+                ),
+            }
+        )
+    else:
+        driver = hw_gpus[0].driver_version
+        checks.append({"name": "NVIDIA driver", "value": driver, "status": "ok"})
+
+    # 3. PyTorch
     try:
         import torch
 
         torch_ver = torch.__version__
         checks.append({"name": "PyTorch", "value": torch_ver, "status": "ok"})
     except ImportError:
+        torch_ver = None
+        # GPU-specific install guidance instead of a generic "install torch".
+        if hw_gpus:
+            rec = recommend_torch(
+                min((g.cc_major, g.cc_minor) for g in hw_gpus)[0],
+                min((g.cc_major, g.cc_minor) for g in hw_gpus)[1],
+            )
+            detail = "PyTorch is not installed.\n  " + _recommendation_detail(rec)
+        else:
+            detail = (
+                "PyTorch is not installed.\n"
+                "  CPU:  uv pip install torch\n"
+                "  CUDA: run `uv run uma_calc setup` for GPU-specific guidance."
+            )
         checks.append(
             {
                 "name": "PyTorch",
                 "value": "not installed",
                 "status": "fail",
-                "detail": "Install: uv pip install torch",
+                "detail": detail,
             }
         )
         failures += 1
@@ -71,9 +145,16 @@ def run_diagnostics(
             checks.append(
                 {"name": "Model file", "value": str(model_path), "status": "skip"}
             )
-        return checks, failures + 1
+        checks.append(
+            {
+                "name": "Verdict",
+                "value": f"{failures} issue(s) to resolve",
+                "status": "fail",
+            }
+        )
+        return checks, failures
 
-    # 3. CUDA
+    # 4. CUDA
     cuda_available = torch.cuda.is_available()
     cuda_suffix = (
         f" (CUDA {torch.version.cuda})"
@@ -86,16 +167,27 @@ def run_diagnostics(
             {"name": "CUDA available", "value": f"True{cuda_suffix}", "status": "ok"}
         )
     else:
+        detail = (
+            "No CUDA GPU available to PyTorch.\n"
+            "  CUDA is required for --device cuda; use --device cpu otherwise."
+        )
+        if hw_gpus:
+            detail += (
+                "\n  An NVIDIA GPU was detected by nvidia-smi but PyTorch\n"
+                "  cannot see it — your PyTorch build may be CPU-only.\n"
+                "  Run:  uv run uma_calc setup"
+            )
         checks.append(
             {
                 "name": "CUDA available",
                 "value": "False",
-                "status": "warn",
-                "detail": "No CUDA GPU detected. Calculations will run on CPU (--device cpu).",
+                "status": "fail",
+                "detail": detail,
             }
         )
+        failures += 1
 
-    # 4. GPU compatibility (only if CUDA is available)
+    # 5. GPU compatibility (per CUDA device)
     if cuda_available:
         for i in range(torch.cuda.device_count()):
             gpu_name = torch.cuda.get_device_name(i)
@@ -105,49 +197,98 @@ def run_diagnostics(
             gpu_cc = f"sm_{major}{minor}"
 
             arch_list = torch.cuda.get_arch_list()
-            arch_ok = (not arch_list) or (gpu_cc in arch_list)
+            arch_ok = arch_supports_device(gpu_cc, arch_list)
+            arch_label = cc_arch_name(major, minor)
+            rec = recommend_torch(major, minor)
 
-            value_str = f"{gpu_name} ({vram_gb:.0f} GB, CC {major}.{minor})"
+            value_str = (
+                f"{gpu_name} ({vram_gb:.0f} GB, CC {major}.{minor}, {arch_label})"
+            )
 
             if arch_ok:
-                checks.append(
-                    {
-                        "name": f"GPU {i}",
-                        "value": value_str,
-                        "status": "ok",
-                    }
-                )
+                # Kernel works. Still note if the installed torch differs from
+                # the recommended one for this GPU.
+                if rec.supported and torch_ver and rec.version not in torch_ver:
+                    detail = (
+                        f"Kernel OK, but installed torch {torch_ver} differs "
+                        f"from recommended {rec.version} for this GPU.\n  "
+                        + _recommendation_detail(rec, installed_torch=torch_ver)
+                    )
+                    checks.append(
+                        {
+                            "name": f"GPU {i}",
+                            "value": value_str,
+                            "status": "warn",
+                            "detail": detail,
+                        }
+                    )
+                else:
+                    checks.append(
+                        {"name": f"GPU {i}", "value": value_str, "status": "ok"}
+                    )
             else:
-                fixes = [
-                    f"GPU {gpu_cc} (CC {major}.{minor}) has NO pre-built PyTorch wheel.",
-                    "All PyTorch versions (2.x, 1.x) only compile sm_50+sm_60 for",
-                    "datacenter Pascal (P100). sm_61 (GTX 10xx, P104-100) was never",
-                    "included in ANY pre-built PyTorch binary.",
-                    "",
-                    "Workable options:",
-                    "  1. Use CPU mode: --device cpu  (works immediately)",
-                    f'  2. Build PyTorch from source: TORCH_CUDA_ARCH_LIST="{gpu_cc}"',
-                    "  3. Replace GPU with sm_60 (Tesla P100) or sm_70+ (Volta+)",
-                ]
-
+                detail = (
+                    f"Architecture {gpu_cc} — NOT supported by this PyTorch "
+                    f"build ({', '.join(arch_list)}).\n  "
+                    + _recommendation_detail(rec, installed_torch=torch_ver)
+                )
                 checks.append(
                     {
                         "name": f"GPU {i}",
                         "value": value_str,
                         "status": "fail",
-                        "detail": (
-                            f"Architecture {gpu_cc} — NOT in PyTorch build ({', '.join(arch_list)}).\n"
-                            f"  sm_61 was NEVER included in ANY pre-built PyTorch wheel.\n"
-                            f"\n" + "\n".join(f"  {f}" for f in fixes) + "\n"
-                            "  After fixing, re-run: uv run uma_calc doctor"
-                        ),
+                        "detail": detail,
                     }
                 )
                 failures += 1
-    else:
-        checks.append({"name": "GPU", "value": "none (CPU only)", "status": "warn"})
 
-    # 5. fairchem-core
+            # VRAM warning
+            vram_mib = props.total_memory // (1024**2)
+            if vram_mib < MIN_VRAM_MIB_WARN:
+                checks.append(
+                    {
+                        "name": f"GPU {i} VRAM",
+                        "value": f"{vram_gb:.1f} GB",
+                        "status": "warn",
+                        "detail": (
+                            f"Below {MIN_VRAM_MIB_WARN // 1024} GB — small "
+                            f"systems only. Use --inference-mode turbo and/or "
+                            f"activation checkpointing for larger ones."
+                        ),
+                    }
+                )
+
+            # Triton/compile note for pre-Volta GPUs.
+            if major < 7:
+                checks.append(
+                    {
+                        "name": f"GPU {i} compile",
+                        "value": "triton unsupported",
+                        "status": "warn",
+                        "detail": (
+                            "Triton (torch.compile) needs CC >= 7.0; turbo MD "
+                            "automatically disables compile on this GPU "
+                            "(handled by UMACalculator)."
+                        ),
+                    }
+                )
+    elif hw_gpus:
+        # CUDA not available but hardware detected — show the GPUs + guidance.
+        for i, g in enumerate(hw_gpus):
+            rec = recommend_torch(g.cc_major, g.cc_minor)
+            value_str = f"{g.name} (CC {g.compute_capability}, {cc_arch_name(g.cc_major, g.cc_minor)})"
+            checks.append(
+                {
+                    "name": f"GPU {i}",
+                    "value": value_str,
+                    "status": "fail",
+                    "detail": "  "
+                    + _recommendation_detail(rec, installed_torch=torch_ver),
+                }
+            )
+            failures += 1
+
+    # 6. fairchem-core
     try:
         import importlib.util
 
@@ -169,7 +310,7 @@ def run_diagnostics(
         )
         failures += 1
 
-    # 6. UMAKit
+    # 7. UMAKit
     try:
         from umakit import __version__ as uma_ver
 
@@ -185,7 +326,7 @@ def run_diagnostics(
         )
         failures += 1
 
-    # 7. Model file (optional)
+    # 8. Model file (optional)
     if model_path:
         mp = Path(model_path)
         if mp.exists():
@@ -216,12 +357,12 @@ def run_diagnostics(
             }
         )
 
-    # 8. Summary recommendation
+    # 9. Summary recommendation
     if failures == 0:
         checks.append(
             {
                 "name": "Verdict",
-                "value": "Ready" if cuda_available else "Ready (CPU mode)",
+                "value": "Ready for CUDA calculations",
                 "status": "ok",
             }
         )

@@ -390,6 +390,24 @@ Examples:
         help="Path to model checkpoint to verify",
     )
 
+    # setup command
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="Detect your GPU and get the matching PyTorch install command",
+        description=(
+            "Detect NVIDIA GPUs via nvidia-smi (works even before PyTorch is "
+            "installed) and print the exact torch version + install commands "
+            "for your card. Supports Maxwell (GTX 900 series) through Hopper; "
+            "Blackwell (RTX 50) gets torch 2.8+; Kepler (GTX 700) is flagged "
+            "unsupported."
+        ),
+    )
+    setup_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output machine-readable JSON instead of the text report",
+    )
+
     # jobs command
     jobs_parser = subparsers.add_parser("jobs", help="List background jobs")
     jobs_parser.add_argument(
@@ -691,6 +709,24 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0 if failures == 0 else 1
 
 
+def cmd_setup(args: argparse.Namespace) -> int:
+    """Detect the GPU and print the matching PyTorch install commands."""
+    import json  # noqa: PLC0415
+
+    from umakit.gpu_setup import (  # noqa: PLC0415
+        detect_gpus,
+        format_setup_report,
+        setup_report_json,
+    )
+
+    gpus = detect_gpus()
+    if args.json:
+        print(json.dumps(setup_report_json(gpus), indent=2, ensure_ascii=False))
+        return 0 if gpus else 1
+    print(format_setup_report(gpus))
+    return 0 if gpus else 1
+
+
 def cmd_jobs(args: argparse.Namespace) -> int:
     """List background jobs."""
     from umakit.jobs import JobManager  # noqa: PLC0415
@@ -767,7 +803,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 1
 
-    print_header()
+    # --json output must be clean (no banner) for scripting.
+    if not (args.command == "setup" and getattr(args, "json", False)):
+        print_header()
 
     # Dispatch to appropriate command handler
     commands = {
@@ -778,6 +816,7 @@ def main(argv: list[str] | None = None) -> int:
         "batch": cmd_batch,
         "template": cmd_template,
         "doctor": cmd_doctor,
+        "setup": cmd_setup,
         "jobs": cmd_jobs,
         "kill": cmd_kill,
         "clean": cmd_clean,
