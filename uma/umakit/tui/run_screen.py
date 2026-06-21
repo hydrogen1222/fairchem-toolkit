@@ -57,21 +57,53 @@ class RunScreen(Screen):
         self.log_widget = self.query_one("#run-log", Log)
         self.progress = self.query_one("#progress-bar", ProgressBar)
         self.status = self.query_one("#status-text", Static)
+        self._log_file = self._open_log_file()
         self._task = asyncio.create_task(self._run_calculation())
 
+    def _open_log_file(self) -> Path | None:
+        """Open a plain-text log file alongside the run for easy copying.
+
+        The on-screen ``Log`` widget is hard to select/copy from; mirror every
+        line to a ``run.log`` under the output dir so it can be grep/cat'd.
+        """
+        try:
+            out_dir = Path(self.app.get_config("output_dir", "./results"))
+            out_dir.mkdir(parents=True, exist_ok=True)
+            log_path = out_dir / "run.log"
+            # Truncate at the start of each run.
+            log_path.write_text("", encoding="utf-8")
+            return log_path
+        except Exception:
+            return None
+
     def _log(self, message: str) -> None:
-        """Add message to log."""
+        """Add message to log (on-screen + mirrored to file)."""
         self.log_widget.write_line(message)
+        if self._log_file is not None:
+            try:
+                with open(self._log_file, "a", encoding="utf-8") as f:
+                    f.write(message + "\n")
+            except Exception:
+                pass
 
     def _update_progress(self, value: float, status: str = "") -> None:
-        """Update progress bar."""
-        self.progress.update(progress=value)
+        """Update progress bar (determinate mode, 0-100).
+
+        Restore a concrete total so percentage = value/100; total is set to
+        None during indeterminate phases.
+        """
+        self.progress.update(total=100, progress=value)
         if status:
             self.status.update(status)
 
     def _update_indeterminate(self, status: str) -> None:
-        """Update progress bar to indeterminate mode."""
-        self.progress.update(progress=None)
+        """Update progress bar to indeterminate mode.
+
+        In textual, indeterminate is signaled by ``total=None`` (NOT
+        ``progress=None`` — that crashes ``_compute_percentage`` with
+        ``None / total``).
+        """
+        self.progress.update(total=None, progress=0)
         self.status.update(status)
 
     def _get_engine_config(self) -> EngineConfig:

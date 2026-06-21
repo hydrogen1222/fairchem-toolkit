@@ -18,6 +18,8 @@ from textual.widgets import (
     Static,
 )
 
+from umakit.tui.config_screen import ConfigScreen
+
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
@@ -81,9 +83,13 @@ class MainScreen(Screen):
             self.app.push_screen("jobs")
             return
 
-        # Update config and go to config screen
+        # Update config and go to config screen.
+        # Push a fresh ConfigScreen instance each time (rather than the cached
+        # named screen) so compose() re-runs and renders the inputs matching the
+        # newly selected calc_type. The named screen in SCREENS is cached after
+        # first use, which left stale opt inputs when switching to md, etc.
         self.app.update_config("calc_type", item_id)
-        self.app.push_screen("config")
+        self.app.push_screen(ConfigScreen())
 
 
 class TemplateScreen(Screen):

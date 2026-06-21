@@ -12,12 +12,16 @@ with local model files.
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fairchem.core import FAIRChemCalculator
 from fairchem.core.units.mlip_unit import load_predict_unit
-from fairchem.core.units.mlip_unit.api.inference import InferenceSettings
+from fairchem.core.units.mlip_unit.api.inference import guess_inference_settings
+
+from umakit.gpu_compat import arch_supports_device
+
 
 if TYPE_CHECKING:
     from typing import ClassVar, Literal
@@ -98,9 +102,12 @@ class UMACalculator:
     def _check_gpu_compatibility(self) -> None:
         """Check if this PyTorch build includes CUDA kernels for this GPU.
 
-        PyTorch 2.7+ with CUDA 12.8 dropped pre-compiled kernels for Pascal
-        GPUs (Compute Capability 6.x: GTX 10xx, P104-100, P100, etc.).
-        These GPUs still work with PyTorch 2.4–2.6 (CUDA 12.1–12.6).
+        PyTorch 2.7+ dropped ``sm_50``/``sm_60`` from its pre-built CUDA wheels,
+        so Pascal GPUs (compute capability 6.x: GTX 10xx, P104-100, P100) no
+        longer have matching kernels and fail with ``no kernel image is
+        available for execution on the device``. These GPUs still work with
+        PyTorch 2.6.x (CUDA 12.4) wheels, which include ``sm_60`` — and
+        ``sm_60`` kernels are binary-compatible with ``sm_61`` devices.
         """
         if self.device not in ("cuda", "gpu"):
             return
@@ -114,26 +121,32 @@ class UMACalculator:
             major, minor = torch.cuda.get_device_capability(0)
             gpu_cc = f"sm_{major}{minor}"
 
-            # Check if this PyTorch build actually includes kernels for this GPU
+            # Check if this PyTorch build actually includes kernels for this GPU.
+            # sm_60 kernels run on sm_61 (minor-revision binary compatibility),
+            # so arch_supports_device accepts sm_60 for an sm_61 device.
             arch_list = torch.cuda.get_arch_list()
-            if arch_list and gpu_cc not in arch_list:
+            if not arch_supports_device(gpu_cc, arch_list):
                 gpu_name = torch.cuda.get_device_name(0)
 
                 raise RuntimeError(
                     f"\n{'=' * 68}\n"
-                    f" GPU NOT SUPPORTED: {gpu_name}\n"
+                    f" GPU NOT SUPPORTED BY THIS PYTORCH BUILD: {gpu_name}\n"
                     f"{'=' * 68}\n\n"
                     f"  Architecture: {gpu_cc} (CC {major}.{minor})\n"
                     f"  PyTorch kernels: {arch_list}\n\n"
-                    f"  Your GPU ({gpu_cc}) was NEVER included in ANY pre-built\n"
-                    f"  PyTorch wheel. PyTorch compiles sm_50+sm_60 for datacenter\n"
-                    f"  Pascal (Tesla P100) but NOT sm_61 (GTX 10xx, P104-100).\n"
-                    f"  This is NOT a version issue — no PyTorch version supports sm_61.\n\n"
+                    f"  This PyTorch build has no kernel compatible with {gpu_cc}.\n"
+                    f"  PyTorch 2.7+ removed sm_50/sm_60 from its pre-built CUDA\n"
+                    f"  wheels, so Pascal GPUs (sm_61: GTX 10xx, P104-100) fail.\n\n"
                     f"  Options:\n"
-                    f"    1. Use CPU mode: --device cpu\n"
-                    f"    2. Build PyTorch from source:\n"
-                    f'       TORCH_CUDA_ARCH_LIST="{gpu_cc}" python setup.py develop\n'
-                    f"    3. Use a GPU with sm_60 (Tesla P100) or sm_70+ (Volta+)\n"
+                    f"    1. Install a PyTorch build that still ships sm_60.\n"
+                    f"       sm_60 kernels are binary-compatible with sm_61:\n"
+                    f"       uv pip install torch==2.6.0 "
+                    f'--index-url https://download.pytorch.org/whl/cu124\n'
+                    f"    2. Build PyTorch from source with Pascal kernels:\n"
+                    f'       TORCH_CUDA_ARCH_LIST="6.0;6.1" '
+                    f"python setup.py develop\n"
+                    f"    3. Use a GPU with sm_70+ (Volta or newer)\n"
+                    f"    4. Fall back to CPU: --device cpu\n"
                     f"{'=' * 68}\n"
                 )
         except RuntimeError:
@@ -150,35 +163,50 @@ class UMACalculator:
         """
         if self._predictor is None:
             self._check_gpu_compatibility()
-            if self.inference_mode == "turbo":
-                settings = InferenceSettings(
-                    tf32=True,
-                    activation_checkpointing=self.activation_checkpointing
-                    if self.activation_checkpointing is not None
-                    else False,
-                    merge_mole=True,
-                    compile=True,
-                    torch_num_threads=self.torch_num_threads,
-                )
-                self._predictor = load_predict_unit(
-                    path=self.model_path,
-                    device=self.device,
-                    inference_settings=settings,
-                )
-            else:
-                settings = InferenceSettings(
-                    activation_checkpointing=self.activation_checkpointing
-                    if self.activation_checkpointing is not None
-                    else True,
-                    torch_num_threads=self.torch_num_threads,
-                )
-                self._predictor = load_predict_unit(
-                    path=self.model_path,
-                    device=self.device,
-                    inference_settings=settings,
-                )
+            # Start from the named preset ("default" / "turbo"), which sets
+            # external_graph_gen / internal_graph_gen_version to values that
+            # actually build a neighbor graph. Building a partial
+            # InferenceSettings by hand leaves those as None (checkpoint
+            # default) and breaks graph generation for some models.
+            settings = copy.deepcopy(guess_inference_settings(self.inference_mode))
+            if self.activation_checkpointing is not None:
+                settings.activation_checkpointing = self.activation_checkpointing
+            if self.torch_num_threads is not None:
+                settings.torch_num_threads = self.torch_num_threads
+            # The "turbo" preset enables torch.compile (inductor/triton backend).
+            # Triton only supports CUDA Capability >= 7.0, so on older GPUs
+            # (e.g. Pascal sm_61: GTX 10xx, P104-100) compilation raises
+            # "too old to be supported by the triton GPU compiler". Disable
+            # compile there and fall back to eager — the other turbo speedups
+            # (tf32, merge_mole) still apply.
+            if settings.compile and not self._compile_supported():
+                settings.compile = False
+            self._predictor = load_predict_unit(
+                path=self.model_path,
+                device=self.device,
+                inference_settings=settings,
+            )
 
         return self._predictor
+
+    @staticmethod
+    def _compile_supported() -> bool:
+        """Whether torch.compile (triton/inductor) can run on the current GPU.
+
+        Triton requires CUDA Capability >= 7.0. Returns True when there is no
+        CUDA device or the capability can't be determined (let torch.compile
+        fail naturally in that case), and False only for known-unsupported
+        older architectures.
+        """
+        try:
+            import torch
+
+            if not torch.cuda.is_available():
+                return True
+            major, _ = torch.cuda.get_device_capability(0)
+            return major >= 7
+        except Exception:
+            return True
 
     def get_calculator(self) -> FAIRChemCalculator:
         """Get ASE calculator instance.

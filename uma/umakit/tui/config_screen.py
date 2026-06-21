@@ -28,6 +28,8 @@ if TYPE_CHECKING:
 
     from textual.app import ComposeResult
 
+from umakit.tui.run_screen import RunScreen
+
 
 class ConfigScreen(Screen):
     """Configuration screen for setting up calculation parameters."""
@@ -350,8 +352,9 @@ class ConfigScreen(Screen):
         detach_switch = self.query_one("#detach-switch", Switch)
         self.app.update_config("detach", detach_switch.value)
 
-        # Go to run screen
-        self.app.push_screen("run")
+        # Go to run screen. Push a fresh instance so on_mount/on_compose re-run
+        # for this run's config (the named "run" screen is cached by Textual).
+        self.app.push_screen(RunScreen())
 
     def action_back(self) -> None:
         """Go back to main screen."""
