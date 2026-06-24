@@ -7,7 +7,7 @@ annotated-doc==0.0.4
 annotated-types==0.7.0
 antlr4-python3-runtime==4.9.3
 anyio==4.12.1
-ase==3.27.0
+ase==3.28.0
 ase-db-backends==0.11.0
 attrs==25.4.0
 bibtexparser==1.4.4
