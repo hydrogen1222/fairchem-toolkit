@@ -9,7 +9,7 @@ antlr4-python3-runtime==4.9.3
 anyio==4.12.1
 ase==3.27.0
 ase-db-backends==0.11.0
-attrs==25.4.0
+attrs==26.1.0
 bibtexparser==1.4.4
 certifi==2026.1.4
 cffi==2.0.0
